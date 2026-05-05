@@ -258,7 +258,9 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
             details: { status: task.status }
           });
         } catch (error) {
-          checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
+          checks.push(
+            failureCheck(id, name, description, error, [SEP_2663_REF])
+          );
         }
       }
     }
@@ -309,7 +311,9 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
             }
           });
         } catch (error) {
-          checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
+          checks.push(
+            failureCheck(id, name, description, error, [SEP_2663_REF])
+          );
         }
       }
     }

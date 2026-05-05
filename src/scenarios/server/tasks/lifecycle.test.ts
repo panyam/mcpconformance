@@ -46,10 +46,14 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
   beforeAll(async () => {
     if (!SHOULD_SPAWN) return;
 
-    serverProcess = spawn(FIXTURE_BINARY!, ['--serve', '--addr', `:${TEST_PORT}`], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: false
-    });
+    serverProcess = spawn(
+      FIXTURE_BINARY!,
+      ['--serve', '--addr', `:${TEST_PORT}`],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false
+      }
+    );
 
     let stdoutBuf = '';
     let stderrBuf = '';
