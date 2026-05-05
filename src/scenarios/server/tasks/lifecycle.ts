@@ -17,24 +17,19 @@ import {
   ClientScenario,
   ConformanceCheck,
   ScenarioSpecTag,
-  SpecReference,
   DRAFT_PROTOCOL_VERSION
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
+  SEP_2663_REF,
+  SEP_2322_REF,
+  errMsg,
+  failureCheck,
+  skipCheck,
   initRawSession,
   rawRequest,
   waitForTerminal
 } from './helpers';
-
-const SEP_2663_REF: SpecReference = {
-  id: 'SEP-2663',
-  url: 'https://github.com/modelcontextprotocol/specification/pull/2663'
-};
-const SEP_2322_REF: SpecReference = {
-  id: 'SEP-2322',
-  url: 'https://github.com/modelcontextprotocol/specification/pull/2322'
-};
 
 export class TasksLifecycleScenario implements ClientScenario {
   name = 'tasks-lifecycle';
@@ -90,13 +85,13 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     let sessionId: string;
     try {
-      sessionId = await initRawSession(serverUrl, {
+      ({ sessionId } = await initRawSession(serverUrl, {
         capabilities: {
           elicitation: {},
           sampling: {},
           extensions: { [TASKS_EXTENSION_ID]: {} }
         }
-      });
+      }));
     } catch (error) {
       checks.push({
         id: 'tasks-session-bootstrap',
@@ -562,43 +557,4 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     return checks;
   }
-}
-
-function errMsg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function failureCheck(
-  id: string,
-  name: string,
-  description: string,
-  error: unknown,
-  specReferences: SpecReference[]
-): ConformanceCheck {
-  return {
-    id,
-    name,
-    description,
-    status: 'FAILURE',
-    timestamp: new Date().toISOString(),
-    errorMessage: errMsg(error),
-    specReferences
-  };
-}
-
-function skipCheck(
-  id: string,
-  name: string,
-  description: string,
-  reason: string
-): ConformanceCheck {
-  return {
-    id,
-    name,
-    description,
-    status: 'SKIPPED',
-    timestamp: new Date().toISOString(),
-    errorMessage: `Skipped: ${reason}`,
-    specReferences: [SEP_2663_REF]
-  };
 }

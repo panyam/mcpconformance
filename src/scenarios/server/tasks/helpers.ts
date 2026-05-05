@@ -12,7 +12,68 @@
  * and this file shrinks (or disappears).
  */
 
+import type { ConformanceCheck, SpecReference } from '../../../types';
+
 export const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
+
+export const SEP_2663_REF: SpecReference = {
+  id: 'SEP-2663',
+  url: 'https://github.com/modelcontextprotocol/specification/pull/2663'
+};
+export const SEP_2322_REF: SpecReference = {
+  id: 'SEP-2322',
+  url: 'https://github.com/modelcontextprotocol/specification/pull/2322'
+};
+export const SEP_2243_REF: SpecReference = {
+  id: 'SEP-2243',
+  url: 'https://github.com/modelcontextprotocol/specification/pull/2243'
+};
+export const SEP_2575_REF: SpecReference = {
+  id: 'SEP-2575',
+  url: 'https://github.com/modelcontextprotocol/specification/pull/2575'
+};
+
+export function errMsg(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Build a FAILURE check from a thrown error, preserving id/name/description. */
+export function failureCheck(
+  id: string,
+  name: string,
+  description: string,
+  error: unknown,
+  specReferences: SpecReference[]
+): ConformanceCheck {
+  return {
+    id,
+    name,
+    description,
+    status: 'FAILURE',
+    timestamp: new Date().toISOString(),
+    errorMessage: errMsg(error),
+    specReferences
+  };
+}
+
+/** Build a SKIPPED check (preserves id stability so Ctrl+F still finds it). */
+export function skipCheck(
+  id: string,
+  name: string,
+  description: string,
+  reason: string,
+  specReferences: SpecReference[] = [SEP_2663_REF]
+): ConformanceCheck {
+  return {
+    id,
+    name,
+    description,
+    status: 'SKIPPED',
+    timestamp: new Date().toISOString(),
+    errorMessage: `Skipped: ${reason}`,
+    specReferences
+  };
+}
 
 export interface InitOpts {
   /** Negotiated wire protocolVersion. Defaults to LATEST_SPEC_VERSION. */
@@ -23,15 +84,28 @@ export interface InitOpts {
   clientInfo?: { name: string; version: string };
 }
 
+export interface InitResult {
+  /** Mcp-Session-Id minted by the server during initialize. */
+  sessionId: string;
+  /** capabilities object the server advertised in its initialize response. */
+  serverCapabilities: Record<string, any>;
+  /** Negotiated protocolVersion echoed back by the server. */
+  serverProtocolVersion?: string;
+  /** Server info (name, version, …). */
+  serverInfo?: Record<string, any>;
+}
+
 /**
- * Run a fresh initialize handshake and return the resulting session id.
- * Bypasses the SDK so callers can declare extension capabilities the
- * SDK's typed wrappers don't yet know about.
+ * Run a fresh initialize handshake and return session id + the server's
+ * advertised capabilities. Bypasses the SDK so callers can declare
+ * extension capabilities the SDK's typed wrappers don't yet know about,
+ * and so the SDK's Zod schemas don't strip extension fields off the
+ * server response.
  */
 export async function initRawSession(
   serverUrl: string,
   opts: InitOpts = {}
-): Promise<string> {
+): Promise<InitResult> {
   const protocolVersion = opts.protocolVersion ?? '2025-11-25';
   const capabilities = opts.capabilities ?? {};
   const clientInfo = opts.clientInfo ?? {
@@ -55,6 +129,14 @@ export async function initRawSession(
   const sid = initResp.headers.get('mcp-session-id') || '';
   if (!sid) throw new Error('initialize response missing Mcp-Session-Id');
 
+  const initBody = await initResp.json();
+  if (initBody.error) {
+    throw new Error(
+      `initialize returned JSON-RPC error: ${JSON.stringify(initBody.error)}`
+    );
+  }
+  const result = initBody.result ?? {};
+
   await fetch(serverUrl, {
     method: 'POST',
     headers: {
@@ -67,7 +149,12 @@ export async function initRawSession(
       method: 'notifications/initialized'
     })
   });
-  return sid;
+  return {
+    sessionId: sid,
+    serverCapabilities: result.capabilities ?? {},
+    serverProtocolVersion: result.protocolVersion,
+    serverInfo: result.serverInfo
+  };
 }
 
 export interface RawRequestOpts {

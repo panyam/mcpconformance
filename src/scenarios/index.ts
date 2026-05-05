@@ -64,6 +64,14 @@ import {
 import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
 
 import { TasksLifecycleScenario } from './server/tasks/lifecycle';
+import { TasksCapabilityNegotiationScenario } from './server/tasks/capability';
+import { TasksWireFieldsScenario } from './server/tasks/wire-fields';
+import { TasksRequestStateScenario } from './server/tasks/request-state';
+import { TasksMRTRInputScenario } from './server/tasks/mrtr-input';
+import { TasksRequestHeadersScenario } from './server/tasks/headers';
+import { TasksDispatchScenario } from './server/tasks/dispatch';
+import { TasksStatusNotificationsScenario } from './server/tasks/notifications';
+import { MrtrEphemeralFlowScenario } from './server/mrtr/ephemeral-flow';
 
 import {
   authScenariosList,
@@ -91,7 +99,20 @@ const pendingClientScenariosList: ClientScenario[] = [
   // so all-scenarios.test.ts cannot exercise this against the default
   // fixture. Active runs target a SEP-2663-conformant server via the
   // dedicated tasks/lifecycle.test.ts harness.
-  new TasksLifecycleScenario()
+  new TasksLifecycleScenario(),
+  new TasksCapabilityNegotiationScenario(),
+  new TasksWireFieldsScenario(),
+  new TasksRequestStateScenario(),
+  new TasksMRTRInputScenario(),
+  new TasksRequestHeadersScenario(),
+  new TasksDispatchScenario(),
+  new TasksStatusNotificationsScenario(),
+
+  // SEP-2322 MRTR (ephemeral IncompleteResult flow).
+  // Targets a different fixture than tasks scenarios; the dedicated
+  // mrtr/all-scenarios.test.ts runner points at an MRTR-conformant
+  // server via MRTR_SERVER_URL / MRTR_SERVER_CMD.
+  new MrtrEphemeralFlowScenario()
 ];
 
 // All client scenarios
@@ -156,7 +177,19 @@ const allClientScenariosList: ClientScenario[] = [
   // filter sees it; pendingClientScenariosList below excludes it from
   // automatic runs against the everything-server (which doesn't implement
   // io.modelcontextprotocol/tasks yet).
-  new TasksLifecycleScenario()
+  new TasksLifecycleScenario(),
+  new TasksCapabilityNegotiationScenario(),
+  new TasksWireFieldsScenario(),
+  new TasksRequestStateScenario(),
+  new TasksMRTRInputScenario(),
+  new TasksRequestHeadersScenario(),
+  new TasksDispatchScenario(),
+  new TasksStatusNotificationsScenario(),
+
+  // SEP-2322 MRTR (ephemeral IncompleteResult flow). Targets a
+  // dedicated MRTR fixture — out of scope for the default
+  // everything-server until SEP-2322 lands there.
+  new MrtrEphemeralFlowScenario()
 ];
 
 // Active client scenarios (excludes pending)
