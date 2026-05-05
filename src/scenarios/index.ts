@@ -63,6 +63,8 @@ import {
 
 import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
 
+import { TasksLifecycleScenario } from './server/tasks/lifecycle';
+
 import {
   authScenariosList,
   backcompatScenariosList,
@@ -81,7 +83,15 @@ const pendingClientScenariosList: ClientScenario[] = [
 
   // On hold until server-side SSE improvements are made
   // https://github.com/modelcontextprotocol/typescript-sdk/pull/1129
-  new ServerSSEPollingScenario()
+  new ServerSSEPollingScenario(),
+
+  // SEP-2663 Tasks extension lifecycle.
+  // The SEP is still in draft (see PR 2663) and the everything-server
+  // does not yet implement the io.modelcontextprotocol/tasks extension,
+  // so all-scenarios.test.ts cannot exercise this against the default
+  // fixture. Active runs target a SEP-2663-conformant server via the
+  // dedicated tasks/lifecycle.test.ts harness.
+  new TasksLifecycleScenario()
 ];
 
 // All client scenarios
@@ -139,7 +149,14 @@ const allClientScenariosList: ClientScenario[] = [
   new PromptsGetWithImageScenario(),
 
   // Security scenarios
-  new DNSRebindingProtectionScenario()
+  new DNSRebindingProtectionScenario(),
+
+  // SEP-2663 Tasks extension (draft).
+  // Listed here so the CLI can find it by name and so the active/pending
+  // filter sees it; pendingClientScenariosList below excludes it from
+  // automatic runs against the everything-server (which doesn't implement
+  // io.modelcontextprotocol/tasks yet).
+  new TasksLifecycleScenario()
 ];
 
 // Active client scenarios (excludes pending)
