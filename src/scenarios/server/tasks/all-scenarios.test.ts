@@ -28,7 +28,6 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { connect } from 'net';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TasksLifecycleScenario } from './lifecycle';
 import { TasksCapabilityNegotiationScenario } from './capability';
@@ -38,6 +37,7 @@ import { TasksMRTRInputScenario } from './mrtr-input';
 import { TasksRequestHeadersScenario } from './headers';
 import { TasksDispatchScenario } from './dispatch';
 import { TasksStatusNotificationsScenario } from './notifications';
+import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
 const SERVER_CMD = process.env.TASKS_SERVER_CMD;
@@ -86,7 +86,7 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
       }
     });
 
-    await waitForTcpReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
+    await waitForServerReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
       (err) => {
         if (serverProcess && !serverProcess.killed) {
           serverProcess.kill('SIGKILL');
@@ -135,42 +135,3 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
     });
   }
 });
-
-/**
- * Poll the host/port of the given URL until a TCP connection succeeds
- * or the timeout elapses. Language-agnostic readiness check — works
- * for any server that binds before serving requests.
- */
-async function waitForTcpReady(url: string, timeoutMs: number): Promise<void> {
-  const u = new URL(url);
-  const port = parseInt(u.port || (u.protocol === 'https:' ? '443' : '80'), 10);
-  const host = u.hostname;
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: Error | null = null;
-
-  while (Date.now() < deadline) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = connect({ host, port }, () => {
-          socket.end();
-          resolve();
-        });
-        socket.once('error', (err) => {
-          socket.destroy();
-          reject(err);
-        });
-        socket.setTimeout(1_000, () => {
-          socket.destroy();
-          reject(new Error('connect timeout'));
-        });
-      });
-      return;
-    } catch (err) {
-      lastErr = err as Error;
-      await new Promise((r) => setTimeout(r, 200));
-    }
-  }
-  throw new Error(
-    `${host}:${port} did not accept TCP connections (last: ${lastErr?.message ?? 'unknown'})`
-  );
-}

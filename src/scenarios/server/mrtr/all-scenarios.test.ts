@@ -22,9 +22,9 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { connect } from 'net';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MrtrEphemeralFlowScenario } from './ephemeral-flow';
+import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.MRTR_SERVER_URL;
 const SERVER_CMD = process.env.MRTR_SERVER_CMD;
@@ -64,7 +64,7 @@ describeIfTarget('SEP-2322 MRTR — server conformance', () => {
       }
     });
 
-    await waitForTcpReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
+    await waitForServerReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
       (err) => {
         if (serverProcess && !serverProcess.killed) {
           serverProcess.kill('SIGKILL');
@@ -113,37 +113,3 @@ describeIfTarget('SEP-2322 MRTR — server conformance', () => {
     });
   }
 });
-
-async function waitForTcpReady(url: string, timeoutMs: number): Promise<void> {
-  const u = new URL(url);
-  const port = parseInt(u.port || (u.protocol === 'https:' ? '443' : '80'), 10);
-  const host = u.hostname;
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: Error | null = null;
-
-  while (Date.now() < deadline) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = connect({ host, port }, () => {
-          socket.end();
-          resolve();
-        });
-        socket.once('error', (err) => {
-          socket.destroy();
-          reject(err);
-        });
-        socket.setTimeout(1_000, () => {
-          socket.destroy();
-          reject(new Error('connect timeout'));
-        });
-      });
-      return;
-    } catch (err) {
-      lastErr = err as Error;
-      await new Promise((r) => setTimeout(r, 200));
-    }
-  }
-  throw new Error(
-    `${host}:${port} did not accept TCP connections (last: ${lastErr?.message ?? 'unknown'})`
-  );
-}

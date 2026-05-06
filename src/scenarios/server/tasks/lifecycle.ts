@@ -30,6 +30,7 @@ import {
   rawRequest,
   waitForTerminal
 } from './helpers';
+import { isIso8601 } from '../_shared/wire-format';
 
 export class TasksLifecycleScenario implements ClientScenario {
   name = 'tasks-lifecycle';
@@ -197,6 +198,19 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
         if ('inputRequests' in result) {
           errs.push(
             'CreateTaskResult MUST NOT carry `inputRequests` (lives on tasks/get DetailedTask)'
+          );
+        }
+        // Timestamps — both keys present, both ISO-8601 formatted. Per
+        // SEP-2663 these are required on every TaskInfoV2. See
+        // `_shared/wire-format.ts` for the regex rationale.
+        if (!isIso8601(result.createdAt)) {
+          errs.push(
+            `createdAt MUST be an ISO-8601 string; got ${JSON.stringify(result.createdAt)}`
+          );
+        }
+        if (!isIso8601(result.lastUpdatedAt)) {
+          errs.push(
+            `lastUpdatedAt MUST be an ISO-8601 string; got ${JSON.stringify(result.lastUpdatedAt)}`
           );
         }
         if (result.taskId) workingTaskId = result.taskId;
