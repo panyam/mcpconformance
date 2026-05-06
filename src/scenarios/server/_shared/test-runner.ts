@@ -18,7 +18,7 @@ import { connect } from 'net';
  * or the timeout elapses. Language-agnostic readiness check — works
  * for any server that binds before serving requests.
  */
-export async function waitForTcpReady(
+export async function waitForServerReady(
   url: string,
   timeoutMs: number
 ): Promise<void> {

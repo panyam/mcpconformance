@@ -31,7 +31,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ListTtlScenario } from './list-ttl';
-import { waitForTcpReady } from '../_shared/test-runner';
+import { waitForServerReady } from '../_shared/test-runner';
 
 const POSITIVE_URL = process.env.LIST_TTL_POSITIVE_URL;
 const ZERO_URL = process.env.LIST_TTL_ZERO_URL;
@@ -90,14 +90,16 @@ describeIfTarget('SEP-2549 List-TTL — server conformance', () => {
           }
         });
 
-        await waitForTcpReady(url, SERVER_STARTUP_TIMEOUT_MS).catch((err) => {
-          for (const p of procs) {
-            if (!p.killed) p.kill('SIGKILL');
+        await waitForServerReady(url, SERVER_STARTUP_TIMEOUT_MS).catch(
+          (err) => {
+            for (const p of procs) {
+              if (!p.killed) p.kill('SIGKILL');
+            }
+            throw new Error(
+              `list-ttl ${label} fixture (${url}) did not become reachable within ${SERVER_STARTUP_TIMEOUT_MS}ms: ${err.message}\nSTDOUT: ${stdoutBuf}\nSTDERR: ${stderrBuf}`
+            );
           }
-          throw new Error(
-            `list-ttl ${label} fixture (${url}) did not become reachable within ${SERVER_STARTUP_TIMEOUT_MS}ms: ${err.message}\nSTDOUT: ${stdoutBuf}\nSTDERR: ${stderrBuf}`
-          );
-        });
+        );
       }
     },
     SERVER_STARTUP_TIMEOUT_MS * 3 + 5_000

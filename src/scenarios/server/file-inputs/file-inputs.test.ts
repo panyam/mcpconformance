@@ -26,7 +26,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FileInputsScenario } from './file-inputs';
-import { waitForTcpReady } from '../_shared/test-runner';
+import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.FILE_INPUTS_SERVER_URL;
 const SERVER_CMD = process.env.FILE_INPUTS_SERVER_CMD;
@@ -66,7 +66,7 @@ describeIfTarget('SEP-2356 File Inputs — server conformance', () => {
       }
     });
 
-    await waitForTcpReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
+    await waitForServerReady(SERVER_URL!, SERVER_STARTUP_TIMEOUT_MS).catch(
       (err) => {
         if (serverProcess && !serverProcess.killed) {
           serverProcess.kill('SIGKILL');
