@@ -1476,8 +1476,7 @@ const RFC_7523_REF: SpecReference = {
   url: 'https://datatracker.ietf.org/doc/html/rfc7523'
 };
 
-const TOKEN_EXCHANGE_GRANT =
-  'urn:ietf:params:oauth:grant-type:token-exchange';
+const TOKEN_EXCHANGE_GRANT = 'urn:ietf:params:oauth:grant-type:token-exchange';
 const JWT_BEARER_GRANT = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
 
 interface AsMetadataFetch {
@@ -1499,9 +1498,7 @@ async function fetchAsMetadata(serverUrl: string): Promise<AsMetadataFetch> {
   // PRM gives us the off-origin AS candidates.
   let prmBody: any = null;
   try {
-    const r = await fetchJson(
-      `${origin}/.well-known/oauth-protected-resource`
-    );
+    const r = await fetchJson(`${origin}/.well-known/oauth-protected-resource`);
     if (r.status === 200 && r.body) prmBody = r.body;
   } catch {
     /* ignore — PRM unreachable, fall through to same-origin probe */
@@ -1587,7 +1584,9 @@ suite grows an OAuth code-flow driver.`;
           errorMessage: `AS metadata unreachable; cannot verify RFC 9207 advertisement. Attempts: ${JSON.stringify(meta.attempts)}`,
           specReferences: [RFC_9207_REF, RFC_8414_REF]
         });
-      } else if (meta.body.authorization_response_iss_parameter_supported === true) {
+      } else if (
+        meta.body.authorization_response_iss_parameter_supported === true
+      ) {
         checks.push({
           id,
           name,
