@@ -14,12 +14,12 @@ aren't stripped.
 
 ## Specs covered
 
-| SEP      | What it adds                                                                                                                                                                                                                                                                                                          | Where it shows up                   |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| SEP      | What it adds                                                                                                                                                                                                                                                                                                                                                                                | Where it shows up                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests/requestState), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds per the 2026-05-07 spec commit aligning duration suffixes) | every scenario                      |
-| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                      | request-state, mrtr-input, dispatch |
-| SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                                | capability                          |
-| SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                   | headers                             |
+| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                                                                                            | request-state, mrtr-input, dispatch |
+| SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                                                                                                      | capability                          |
+| SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                                                                                         | headers                             |
 
 ## ClientScenario classes
 
@@ -54,11 +54,11 @@ vs protocol errors, cancellation semantics.
 
 ### `tasks-wire-fields` (`wire-fields.ts`)
 
-| Check                                          | What it tests                                                                                |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Check                                          | What it tests                                                                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `tasks-wire-field-renames`                     | `ttlMs` + `pollIntervalMs` present; legacy `ttl` / `pollInterval` and interim `ttlSeconds` / `pollIntervalMilliseconds` keys absent |
-| `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                      |
-| `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result` |
+| `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                                                             |
+| `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result`                                        |
 
 ### `tasks-request-state` (`request-state.ts`)
 
