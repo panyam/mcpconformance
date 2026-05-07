@@ -2,12 +2,13 @@
 
 Tests an MCP server's OAuth 2.0 discovery surface required by the MCP authorization spec (2025-11-25).
 
-Two ClientScenarios so far, in priority order:
+Three ClientScenarios so far, in priority order:
 
 - **Phase 1 — `auth-oauth-discovery`**: read-only RFC 9728 PRM + RFC 8414 AS metadata. No token flows. (5 checks)
 - **Phase 2 — `auth-jwt-validation`**: RFC 6750 Bearer-token enforcement on auth-gated methods. No-token / malformed / tampered / valid-token paths. (5 checks; 2 emit INFO without `AUTH_VALID_TOKEN`)
+- **Phase 2.5 — `auth-jwt-claims`**: RFC 7519 standard claim validation. Expired (`exp`), wrong-audience (`aud`), wrong-issuer (`iss`) — each must be rejected even though the JWT signature verifies. (3 checks; each emits INFO without its corresponding `AUTH_{EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN`)
 
-Both tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
+All three tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
 
 ## ClientScenario classes
 
@@ -37,6 +38,18 @@ Single class with 5 internal `ConformanceCheck` records covering the OAuth 2.0 d
 
 The tampered-token check derives a forged JWT from `AUTH_VALID_TOKEN` by flipping the last byte of the signature segment — keeps the JWT structurally valid (3 parts, parseable header + payload) but breaks signature verification. The fixture is responsible for rejecting it.
 
+### `auth-jwt-claims` (`auth.ts`)
+
+3 internal `ConformanceCheck` records covering RFC 7519 standard claim validation. Each test sends a properly-signed JWT (so the JWKS signature check passes) whose claims violate one specific RFC 7519 requirement.
+
+| Check                                        | What it tests                                                                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth-jwt-claims-expired-rejected`           | Properly signed token with `exp` in the past → HTTP 401 (RFC 7519 §4.1.4). INFO when `AUTH_EXPIRED_TOKEN` env unset                        |
+| `auth-jwt-claims-wrong-audience-rejected`    | Properly signed token with `aud` ≠ resource URI → HTTP 401 (RFC 7519 §4.1.3). INFO when `AUTH_WRONG_AUDIENCE_TOKEN` env unset              |
+| `auth-jwt-claims-wrong-issuer-rejected`      | Token signed by trusted AS but with `iss` claim claiming a different issuer → HTTP 401 (RFC 7519 §4.1.1). INFO when `AUTH_WRONG_ISSUER_TOKEN` env unset |
+
+Each token shape is a deliberate single-claim violation — the signature is valid (signed by the trusted AS), so each test isolates one claim-validation behavior. The fixture is responsible for minting these tokens (e.g., a `MintExpiredToken` / `MintWrongAudienceToken` / `MintWrongIssuerToken` helper that overrides RFC 7519 defaults via `MintTokenWithClaims`-style API).
+
 ## Required server fixture
 
 The fixture server MUST expose:
@@ -46,9 +59,10 @@ The fixture server MUST expose:
 | `/.well-known/oauth-protected-resource`                                                 | RFC 9728 + MCP 2025-11-25          | `{ resource, authorization_servers, ... }`                |
 | `/.well-known/oauth-protected-resource{mcpPath}`                                        | RFC 9728 §3.1 (when mcpPath ≠ `/`) | same shape                                                |
 | `/.well-known/oauth-authorization-server` (or off-origin equivalent advertised via PRM) | RFC 8414                           | `{ issuer, authorization_endpoint, token_endpoint, ... }` |
-| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 (`auth-jwt-validation`)    | requires Bearer auth but no specific scope                |
+| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 + 2.5                      | requires Bearer auth but no specific scope                |
+| Mint helpers exposing valid + deliberately-bad-claim tokens to the test runner          | Phase 2 + 2.5                      | tokens passed via env vars (see token-acquisition below)  |
 
-Any-language fixture works. One example reference implementation lives at https://github.com/panyam/mcpkit/tree/main/examples/auth, which mounts these endpoints via `auth.MountAuth(...)`.
+Any-language fixture works. One example reference implementation lives at https://github.com/panyam/mcpkit/tree/main/examples/auth, which mounts the well-known endpoints via `auth.MountAuth(...)` and pre-mints the four token shapes (`tok_read` valid, plus `tok_expired`, `tok_wrong_audience`, `tok_wrong_issuer`) via `MintTokenWithClaims`-based helpers and serves them at `/demo/bootstrap`.
 
 ## Running
 
@@ -62,15 +76,18 @@ AUTH_SERVER_CMD="/path/to/auth-server --serve --addr=:18098" \
 AUTH_SERVER_URL=http://localhost:8080/mcp \
   npx vitest run src/scenarios/server/auth/auth.test.ts
 
-# With Phase 2 valid-token / tampered-token checks enabled
+# With all Phase 2 + 2.5 token-needing checks enabled
 AUTH_SERVER_URL=http://localhost:18098/mcp \
 AUTH_VALID_TOKEN="eyJhbGciOi..." \
+AUTH_EXPIRED_TOKEN="eyJhbGciOi..." \
+AUTH_WRONG_AUDIENCE_TOKEN="eyJhbGciOi..." \
+AUTH_WRONG_ISSUER_TOKEN="eyJhbGciOi..." \
   npx vitest run src/scenarios/server/auth/auth.test.ts
 ```
 
-If `AUTH_SERVER_URL` is unset, the suite is skipped. If `AUTH_VALID_TOKEN` is unset, Phase 2's valid- and tampered-token checks emit `INFO` rather than `FAILURE` — they're "couldn't verify" rather than "spec violation."
+If `AUTH_SERVER_URL` is unset, the suite is skipped. Token-needing checks emit `INFO` rather than `FAILURE` when their token env var is unset — they're "couldn't verify" rather than "spec violation."
 
-Token acquisition is fixture-specific: the test runner is responsible for obtaining a valid token (e.g., via a bootstrap endpoint, a token-endpoint flow, or pre-minted via env) and exporting it as `AUTH_VALID_TOKEN` before invoking the scenario.
+Token acquisition is fixture-specific: the test runner is responsible for obtaining each token shape from the fixture (e.g., via a bootstrap endpoint that exposes pre-minted bad tokens, a token-endpoint flow, or pre-minted via env) and exporting them via the `AUTH_*_TOKEN` env vars before invoking the scenario.
 
 ## Roadmap
 
@@ -78,9 +95,9 @@ Token acquisition is fixture-specific: the test runner is responsible for obtain
 | ----- | ---------------------------------------------------------------------------------- | ------------------------------------- |
 | 1     | `auth-oauth-discovery` (PRM + AS metadata)                                         | shipped                               |
 | 2     | `auth-jwt-validation` (no-token / malformed / tampered / valid-token)              | shipped                               |
-| 2.5   | `auth-jwt-claims` (audience, expiry, issuer — needs fixture token-mint extension)  | planned                               |
+| 2.5   | `auth-jwt-claims` (audience, expiry, issuer)                                       | shipped                               |
 | 3     | `auth-scope-step-up` (SEP-2350: 401/403 retry + scope union from WWW-Authenticate) | planned, after upstream stabilizes    |
 | 3     | `auth-iss-param` (RFC 9207, SEP-2468)                                              | planned, paired with mcpkit issue 380 |
 | 3     | `auth-enterprise-managed` (RFC 8693 + RFC 7523 chain)                              | planned, paired with mcpkit issue 381 |
 
-Phase 2 only needs the fixture to expose a valid token through some out-of-band channel (the test runner provides it via `AUTH_VALID_TOKEN`). Phase 2.5 needs the fixture to mint deliberately-bad tokens (expired, wrong audience, wrong issuer) — the next fixture-design decision lands there.
+Phase 2 + 2.5 need the fixture to mint a valid token plus three deliberately-bad-claim variants (expired, wrong audience, wrong issuer); the test runner exposes each as a separate `AUTH_*_TOKEN` env var. Phase 3 (scope step-up + RFC 9207 `iss` parameter + RFC 8693 enterprise chain) lifts the bar substantially — needs the fixture to also expose a token endpoint that the conformance suite drives through actual OAuth flows. That decision lands when Phase 3 starts.

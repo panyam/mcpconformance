@@ -27,7 +27,11 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AuthJwtValidationScenario, AuthOAuthDiscoveryScenario } from './auth';
+import {
+  AuthJwtClaimsScenario,
+  AuthJwtValidationScenario,
+  AuthOAuthDiscoveryScenario
+} from './auth';
 import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.AUTH_SERVER_URL;
@@ -38,7 +42,8 @@ const HAVE_TARGET = Boolean(SERVER_URL);
 
 const AUTH_SCENARIOS = [
   new AuthOAuthDiscoveryScenario(),
-  new AuthJwtValidationScenario()
+  new AuthJwtValidationScenario(),
+  new AuthJwtClaimsScenario()
 ];
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;

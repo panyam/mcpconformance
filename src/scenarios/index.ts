@@ -45,6 +45,7 @@ import { ServerSSEPollingScenario } from './server/sse-polling';
 import { FileInputsScenario } from './server/file-inputs/file-inputs';
 import { ListTtlScenario } from './server/list-ttl/list-ttl';
 import {
+  AuthJwtClaimsScenario,
   AuthJwtValidationScenario,
   AuthOAuthDiscoveryScenario
 } from './server/auth/auth';
@@ -104,17 +105,19 @@ const pendingClientScenariosList: ClientScenario[] = [
   // pointing at the three fixtures.
   new ListTtlScenario(),
 
-  // MCP Auth — server-side conformance (Phases 1 + 2 so far).
+  // MCP Auth — server-side conformance (Phases 1 + 2 + 2.5 so far).
   // Phase 1 (auth-oauth-discovery): RFC 9728 PRM + RFC 8414 AS metadata.
   // Phase 2 (auth-jwt-validation): RFC 6750 Bearer token validation —
   //   401 + WWW-Authenticate, malformed/tampered/valid-token paths.
+  // Phase 2.5 (auth-jwt-claims): RFC 7519 standard claim validation —
+  //   expired (exp), wrong-audience (aud), wrong-issuer (iss).
   // Skipped from default runs because the upstream everything-server
   // doesn't expose the auth surface. Run via the dedicated auth.test.ts
-  // harness with AUTH_SERVER_URL pointing at a fixture; Phase 2's
-  // valid-token / tampered-token checks additionally need
-  // AUTH_VALID_TOKEN.
+  // harness with AUTH_SERVER_URL; the per-claim-token checks
+  // additionally need AUTH_{VALID,EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN.
   new AuthOAuthDiscoveryScenario(),
-  new AuthJwtValidationScenario()
+  new AuthJwtValidationScenario(),
+  new AuthJwtClaimsScenario()
 ];
 
 // All client scenarios
@@ -179,7 +182,8 @@ const allClientScenariosList: ClientScenario[] = [
   new FileInputsScenario(),
   new ListTtlScenario(),
   new AuthOAuthDiscoveryScenario(),
-  new AuthJwtValidationScenario()
+  new AuthJwtValidationScenario(),
+  new AuthJwtClaimsScenario()
 ];
 
 // Active client scenarios (excludes pending)

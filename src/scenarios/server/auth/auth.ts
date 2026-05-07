@@ -783,3 +783,137 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
     return checks;
   }
 }
+
+// =============================================================================
+// Phase 2.5 — JWT claim validation (audience, expiry, issuer)
+// =============================================================================
+
+export class AuthJwtClaimsScenario implements ClientScenario {
+  name = 'auth-jwt-claims';
+  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  description = `Test that an MCP server enforces JWT claim validation per RFC 7519 + the MCP authorization spec (2025-11-25).
+
+**Server Implementation Requirements:**
+
+A properly signed JWT (signature verifies against the AS's JWKS) MUST
+still be rejected when any of the following standard claims fail
+validation:
+
+- **\`exp\` (expiry, RFC 7519 §4.1.4)** — tokens whose \`exp\` is in
+  the past MUST be rejected with HTTP 401.
+- **\`aud\` (audience, RFC 7519 §4.1.3 + MCP authorization spec)** —
+  tokens whose \`aud\` claim doesn't match the resource URI MUST be
+  rejected with HTTP 401. Audience-binding prevents token reuse across
+  resources (confused-deputy mitigation).
+- **\`iss\` (issuer, RFC 7519 §4.1.1)** — tokens whose \`iss\` claim
+  doesn't match the AS the resource trusts MUST be rejected with
+  HTTP 401, even if the token signature happens to verify against the
+  JWKS at the trusted issuer.
+
+This scenario reads three optional env vars supplying tokens that fail
+each claim validation specifically:
+
+  AUTH_EXPIRED_TOKEN          — properly signed, \`exp\` in the past
+  AUTH_WRONG_AUDIENCE_TOKEN   — properly signed, \`aud\` mismatched
+  AUTH_WRONG_ISSUER_TOKEN     — properly signed, \`iss\` mismatched
+
+Each check emits \`INFO\` if its corresponding env var is unset (the
+fixture didn't provide that token shape) — that's "couldn't verify"
+rather than a spec violation.
+
+Token acquisition is fixture-specific: the test runner is responsible
+for obtaining each token from the fixture (e.g., via a bootstrap
+endpoint that exposes pre-minted bad tokens) and exporting it via the
+appropriate env var before invoking the scenario.`;
+
+  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+    const checks: ConformanceCheck[] = [];
+
+    const TOOL = 'echo';
+    const ARGS = { message: 'auth-jwt-claims' };
+
+    interface ClaimCase {
+      id: string;
+      name: string;
+      description: string;
+      env: string;
+      claim: 'exp' | 'aud' | 'iss';
+    }
+
+    const cases: ClaimCase[] = [
+      {
+        id: 'auth-jwt-claims-expired-rejected',
+        name: 'AuthJwtClaimsExpiredRejected',
+        description:
+          'tools/call with a properly signed but expired token MUST be rejected with HTTP 401 (RFC 7519 §4.1.4)',
+        env: 'AUTH_EXPIRED_TOKEN',
+        claim: 'exp'
+      },
+      {
+        id: 'auth-jwt-claims-wrong-audience-rejected',
+        name: 'AuthJwtClaimsWrongAudienceRejected',
+        description:
+          'tools/call with a properly signed token whose `aud` does not match the resource MUST be rejected with HTTP 401 (RFC 7519 §4.1.3 + MCP authorization spec)',
+        env: 'AUTH_WRONG_AUDIENCE_TOKEN',
+        claim: 'aud'
+      },
+      {
+        id: 'auth-jwt-claims-wrong-issuer-rejected',
+        name: 'AuthJwtClaimsWrongIssuerRejected',
+        description:
+          'tools/call with a token whose `iss` claim does not match the trusted AS MUST be rejected with HTTP 401 (RFC 7519 §4.1.1)',
+        env: 'AUTH_WRONG_ISSUER_TOKEN',
+        claim: 'iss'
+      }
+    ];
+
+    for (const tc of cases) {
+      const token = process.env[tc.env] ?? null;
+      if (token === null) {
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage: `${tc.env} unset; cannot verify ${tc.claim} validation. Set ${tc.env} to a properly signed token whose ${tc.claim} claim is invalid to enable this check.`,
+          specReferences: [MCP_AUTH_REF]
+        });
+        continue;
+      }
+
+      try {
+        const r = await postToolsCall(serverUrl, token, TOOL, ARGS);
+        const errs: string[] = [];
+        if (r.status !== 401) {
+          errs.push(
+            `status MUST be 401 for a token with invalid ${tc.claim}; got ${r.status}`
+          );
+        }
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: [MCP_AUTH_REF],
+          details: { httpStatus: r.status, claim: tc.claim }
+        });
+      } catch (error) {
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+          specReferences: [MCP_AUTH_REF]
+        });
+      }
+    }
+
+    return checks;
+  }
+}
