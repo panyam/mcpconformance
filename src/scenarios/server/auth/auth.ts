@@ -126,7 +126,9 @@ and scope step-up are separate scenarios.`;
           errs.push(`status MUST be 200; got ${r.status}`);
         }
         if (r.body === null) {
-          errs.push(`response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`);
+          errs.push(
+            `response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`
+          );
         } else {
           if (typeof r.body.resource !== 'string') {
             errs.push('PRM MUST carry `resource` (string)');
@@ -134,7 +136,9 @@ and scope step-up are separate scenarios.`;
           if (
             !Array.isArray(r.body.authorization_servers) ||
             r.body.authorization_servers.length === 0 ||
-            r.body.authorization_servers.some((s: unknown) => typeof s !== 'string')
+            r.body.authorization_servers.some(
+              (s: unknown) => typeof s !== 'string'
+            )
           ) {
             errs.push(
               'PRM MUST carry `authorization_servers` (non-empty array of strings)'
@@ -164,8 +168,7 @@ and scope step-up are separate scenarios.`;
           description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_9728_REF, MCP_AUTH_REF]
         });
       }
@@ -260,8 +263,7 @@ and scope step-up are separate scenarios.`;
           description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_9728_REF]
         });
       }
@@ -292,7 +294,11 @@ and scope step-up are separate scenarios.`;
         }
       }
       let chosen: { url: string; result: FetchedJson } | null = null;
-      const reachAttempts: Array<{ url: string; status: number | null; error?: string }> = [];
+      const reachAttempts: Array<{
+        url: string;
+        status: number | null;
+        error?: string;
+      }> = [];
       for (const url of candidates) {
         try {
           const r = await fetchJson(url);
@@ -412,8 +418,7 @@ and scope step-up are separate scenarios.`;
           description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_8414_REF]
         });
       }
