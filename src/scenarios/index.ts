@@ -47,7 +47,8 @@ import { ListTtlScenario } from './server/list-ttl/list-ttl';
 import {
   AuthJwtClaimsScenario,
   AuthJwtValidationScenario,
-  AuthOAuthDiscoveryScenario
+  AuthOAuthDiscoveryScenario,
+  AuthScopeStepUpScenario
 } from './server/auth/auth';
 import { ServerSSEMultipleStreamsScenario } from './server/sse-multiple-streams';
 
@@ -105,19 +106,22 @@ const pendingClientScenariosList: ClientScenario[] = [
   // pointing at the three fixtures.
   new ListTtlScenario(),
 
-  // MCP Auth — server-side conformance (Phases 1 + 2 + 2.5 so far).
+  // MCP Auth — server-side conformance (Phases 1 + 2 + 2.5 + 3a so far).
   // Phase 1 (auth-oauth-discovery): RFC 9728 PRM + RFC 8414 AS metadata.
   // Phase 2 (auth-jwt-validation): RFC 6750 Bearer token validation —
   //   401 + WWW-Authenticate, malformed/tampered/valid-token paths.
   // Phase 2.5 (auth-jwt-claims): RFC 7519 standard claim validation —
   //   expired (exp), wrong-audience (aud), wrong-issuer (iss).
+  // Phase 3a (auth-scope-step-up): SEP-2350 + RFC 6750 §3.1 — 403 +
+  //   error="insufficient_scope" + scope="..." advertisement.
   // Skipped from default runs because the upstream everything-server
   // doesn't expose the auth surface. Run via the dedicated auth.test.ts
-  // harness with AUTH_SERVER_URL; the per-claim-token checks
-  // additionally need AUTH_{VALID,EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN.
+  // harness with AUTH_SERVER_URL; the token-needing checks additionally
+  // need AUTH_{VALID,READWRITE,FULL,EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN.
   new AuthOAuthDiscoveryScenario(),
   new AuthJwtValidationScenario(),
-  new AuthJwtClaimsScenario()
+  new AuthJwtClaimsScenario(),
+  new AuthScopeStepUpScenario()
 ];
 
 // All client scenarios
@@ -183,7 +187,8 @@ const allClientScenariosList: ClientScenario[] = [
   new ListTtlScenario(),
   new AuthOAuthDiscoveryScenario(),
   new AuthJwtValidationScenario(),
-  new AuthJwtClaimsScenario()
+  new AuthJwtClaimsScenario(),
+  new AuthScopeStepUpScenario()
 ];
 
 // Active client scenarios (excludes pending)

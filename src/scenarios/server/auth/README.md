@@ -2,13 +2,14 @@
 
 Tests an MCP server's OAuth 2.0 discovery surface required by the MCP authorization spec (2025-11-25).
 
-Three ClientScenarios so far, in priority order:
+Four ClientScenarios so far, in priority order:
 
 - **Phase 1 — `auth-oauth-discovery`**: read-only RFC 9728 PRM + RFC 8414 AS metadata. No token flows. (5 checks)
 - **Phase 2 — `auth-jwt-validation`**: RFC 6750 Bearer-token enforcement on auth-gated methods. No-token / malformed / tampered / valid-token paths. (5 checks; 2 emit INFO without `AUTH_VALID_TOKEN`)
 - **Phase 2.5 — `auth-jwt-claims`**: RFC 7519 standard claim validation. Expired (`exp`), wrong-audience (`aud`), wrong-issuer (`iss`) — each must be rejected even though the JWT signature verifies. (3 checks; each emits INFO without its corresponding `AUTH_{EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN`)
+- **Phase 3a — `auth-scope-step-up`**: SEP-2350 + RFC 6750 §3.1 scope enforcement. 403 + `error="insufficient_scope"` + `scope="..."` advertisement. (5 checks; require `AUTH_VALID_TOKEN` and/or `AUTH_READWRITE_TOKEN` to fully exercise)
 
-All three tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
+All four tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
 
 ## ClientScenario classes
 
@@ -50,6 +51,18 @@ The tampered-token check derives a forged JWT from `AUTH_VALID_TOKEN` by flippin
 
 Each token shape is a deliberate single-claim violation — the signature is valid (signed by the trusted AS), so each test isolates one claim-validation behavior. The fixture is responsible for minting these tokens (e.g., a `MintExpiredToken` / `MintWrongAudienceToken` / `MintWrongIssuerToken` helper that overrides RFC 7519 defaults via `MintTokenWithClaims`-style API).
 
+### `auth-scope-step-up` (`auth.ts`)
+
+5 internal `ConformanceCheck` records covering scope enforcement on the fixture's `write-tool` (requires `write` scope) and `admin-tool` (requires `admin` scope). The scenario initializes a session with each token before issuing the scope-checked `tools/call`, since scope middleware runs after session resolution.
+
+| Check                                                | What it tests                                                                                                                                                                                  |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-scope-step-up-insufficient-scope-rejected`     | `tools/call` to `write-tool` with read-only token → HTTP 403 (RFC 6750 §3.1). INFO when `AUTH_VALID_TOKEN` env unset                                                                           |
+| `auth-scope-step-up-www-authenticate-error`          | 403 carries `WWW-Authenticate: Bearer error="insufficient_scope"` (RFC 6750 §3.1)                                                                                                              |
+| `auth-scope-step-up-www-authenticate-advertises-scope` | 403 carries `scope="..."` parameter listing missing scope (SEP-2350; clients use this to drive scope step-up)                                                                                |
+| `auth-scope-step-up-sufficient-scope-accepted`       | `tools/call` to `write-tool` with `read+write` token → HTTP not 403 (allowed past scope gate). INFO when `AUTH_READWRITE_TOKEN` env unset                                                      |
+| `auth-scope-step-up-scope-varies-by-tool`            | `admin-tool` advertises `admin` and `write-tool` advertises `write` — server MUST compute the missing scope per-operation, not advertise a static placeholder. INFO when `AUTH_VALID_TOKEN` env unset |
+
 ## Required server fixture
 
 The fixture server MUST expose:
@@ -59,8 +72,9 @@ The fixture server MUST expose:
 | `/.well-known/oauth-protected-resource`                                                 | RFC 9728 + MCP 2025-11-25          | `{ resource, authorization_servers, ... }`                |
 | `/.well-known/oauth-protected-resource{mcpPath}`                                        | RFC 9728 §3.1 (when mcpPath ≠ `/`) | same shape                                                |
 | `/.well-known/oauth-authorization-server` (or off-origin equivalent advertised via PRM) | RFC 8414                           | `{ issuer, authorization_endpoint, token_endpoint, ... }` |
-| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 + 2.5                      | requires Bearer auth but no specific scope                |
-| Mint helpers exposing valid + deliberately-bad-claim tokens to the test runner          | Phase 2 + 2.5                      | tokens passed via env vars (see token-acquisition below)  |
+| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 + 2.5                      | requires Bearer auth but no specific scope                                          |
+| Two scope-gated tools named `write-tool` (requires `write`) and `admin-tool` (requires `admin`) | Phase 3a                           | scope enforcement returns 403 + WWW-Authenticate `scope="..."` per missing scope    |
+| Mint helpers exposing valid + deliberately-bad-claim + multi-scope tokens               | Phase 2 + 2.5 + 3a                 | tokens passed via env vars (see token-acquisition below)                            |
 
 Any-language fixture works. One example reference implementation lives at https://github.com/panyam/mcpkit/tree/main/examples/auth, which mounts the well-known endpoints via `auth.MountAuth(...)` and pre-mints the four token shapes (`tok_read` valid, plus `tok_expired`, `tok_wrong_audience`, `tok_wrong_issuer`) via `MintTokenWithClaims`-based helpers and serves them at `/demo/bootstrap`.
 
@@ -76,9 +90,11 @@ AUTH_SERVER_CMD="/path/to/auth-server --serve --addr=:18098" \
 AUTH_SERVER_URL=http://localhost:8080/mcp \
   npx vitest run src/scenarios/server/auth/auth.test.ts
 
-# With all Phase 2 + 2.5 token-needing checks enabled
+# With all Phase 2 + 2.5 + 3a token-needing checks enabled
 AUTH_SERVER_URL=http://localhost:18098/mcp \
 AUTH_VALID_TOKEN="eyJhbGciOi..." \
+AUTH_READWRITE_TOKEN="eyJhbGciOi..." \
+AUTH_FULL_TOKEN="eyJhbGciOi..." \
 AUTH_EXPIRED_TOKEN="eyJhbGciOi..." \
 AUTH_WRONG_AUDIENCE_TOKEN="eyJhbGciOi..." \
 AUTH_WRONG_ISSUER_TOKEN="eyJhbGciOi..." \
@@ -96,8 +112,10 @@ Token acquisition is fixture-specific: the test runner is responsible for obtain
 | 1     | `auth-oauth-discovery` (PRM + AS metadata)                                         | shipped                               |
 | 2     | `auth-jwt-validation` (no-token / malformed / tampered / valid-token)              | shipped                               |
 | 2.5   | `auth-jwt-claims` (audience, expiry, issuer)                                       | shipped                               |
-| 3     | `auth-scope-step-up` (SEP-2350: 401/403 retry + scope union from WWW-Authenticate) | planned, after upstream stabilizes    |
-| 3     | `auth-iss-param` (RFC 9207, SEP-2468)                                              | planned, paired with mcpkit issue 380 |
-| 3     | `auth-enterprise-managed` (RFC 8693 + RFC 7523 chain)                              | planned, paired with mcpkit issue 381 |
+| 3a    | `auth-scope-step-up` (SEP-2350: 403 + scope advertisement)                         | shipped                               |
+| 3b    | `auth-iss-param` (RFC 9207, SEP-2468)                                              | planned, needs OAuth code flow driver |
+| 3c    | `auth-enterprise-managed` (RFC 8693 token exchange + RFC 7523 JWT bearer chain)    | planned, needs OAuth token-flow driver |
 
-Phase 2 + 2.5 need the fixture to mint a valid token plus three deliberately-bad-claim variants (expired, wrong audience, wrong issuer); the test runner exposes each as a separate `AUTH_*_TOKEN` env var. Phase 3 (scope step-up + RFC 9207 `iss` parameter + RFC 8693 enterprise chain) lifts the bar substantially — needs the fixture to also expose a token endpoint that the conformance suite drives through actual OAuth flows. That decision lands when Phase 3 starts.
+Phase 2 + 2.5 + 3a need the fixture to mint pre-issued tokens at multiple scope levels plus deliberately-bad-claim variants; the test runner exposes each as a separate `AUTH_*_TOKEN` env var. Phase 3a additionally needs at least two scope-gated tools (`write-tool` + `admin-tool`) to verify scope advertisement varies per-operation.
+
+Phases 3b (`auth-iss-param`) and 3c (`auth-enterprise-managed`) lift the bar substantially — they need the conformance scenarios to drive actual OAuth flows (auth code redirect for RFC 9207 iss validation; full token-exchange flow for RFC 8693 + RFC 7523 chain). That fixture-/runner-design decision lands when those phases start.

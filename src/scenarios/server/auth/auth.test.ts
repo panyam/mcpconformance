@@ -30,7 +30,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   AuthJwtClaimsScenario,
   AuthJwtValidationScenario,
-  AuthOAuthDiscoveryScenario
+  AuthOAuthDiscoveryScenario,
+  AuthScopeStepUpScenario
 } from './auth';
 import { waitForServerReady } from '../_shared/test-runner';
 
@@ -43,7 +44,8 @@ const HAVE_TARGET = Boolean(SERVER_URL);
 const AUTH_SCENARIOS = [
   new AuthOAuthDiscoveryScenario(),
   new AuthJwtValidationScenario(),
-  new AuthJwtClaimsScenario()
+  new AuthJwtClaimsScenario(),
+  new AuthScopeStepUpScenario()
 ];
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;

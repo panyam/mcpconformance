@@ -916,3 +916,512 @@ appropriate env var before invoking the scenario.`;
     return checks;
   }
 }
+
+// =============================================================================
+// Phase 3 — Scope step-up (SEP-2350 + RFC 6750 §3.1)
+// =============================================================================
+
+const SEP_2350_REF: SpecReference = {
+  id: 'SEP-2350',
+  url: 'https://github.com/modelcontextprotocol/specification/pull/2350'
+};
+
+interface SessionInit {
+  sessionId: string;
+  status: number;
+}
+
+/**
+ * Initialize an MCP session over Streamable HTTP. Returns the
+ * `Mcp-Session-Id` header from the response. Drives the public
+ * `initialize` method, which on the auth fixture is in the
+ * public-methods allowlist (no auth required), but we send the token
+ * anyway because realistic clients always carry their bearer token.
+ */
+async function initializeSession(
+  serverUrl: string,
+  token: string
+): Promise<SessionInit> {
+  const resp = await fetch(serverUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: `init-${Math.random().toString(36).slice(2, 10)}`,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'auth-conformance', version: '1.0' }
+      }
+    })
+  });
+  // Drain body; we only need the session header.
+  await resp.text();
+  return {
+    sessionId: resp.headers.get('mcp-session-id') ?? '',
+    status: resp.status
+  };
+}
+
+/**
+ * Send a `tools/call` request on an existing session. Like
+ * `postToolsCall` but additionally sets the `Mcp-Session-Id` header so
+ * the dispatcher reaches scope middleware (which runs after session
+ * resolution).
+ */
+async function postToolsCallWithSession(
+  serverUrl: string,
+  token: string,
+  sessionId: string,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<PostResult> {
+  const resp = await fetch(serverUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${token}`,
+      'Mcp-Session-Id': sessionId
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: `step-up-${Math.random().toString(36).slice(2, 10)}`,
+      method: 'tools/call',
+      params: { name: toolName, arguments: args }
+    })
+  });
+  return {
+    status: resp.status,
+    wwwAuthenticate: resp.headers.get('www-authenticate'),
+    contentType: resp.headers.get('content-type') ?? '',
+    bodyText: await resp.text()
+  };
+}
+
+/**
+ * Parse a single auth-param value out of an RFC 6750 WWW-Authenticate
+ * header. Looks for `<key>=<value>` where value may be quoted with
+ * double quotes. Returns the unquoted value or null when absent.
+ *
+ * Example: `Bearer error="insufficient_scope", scope="write"`
+ *   getAuthParam(h, 'scope') === 'write'
+ *   getAuthParam(h, 'error') === 'insufficient_scope'
+ */
+function getAuthParam(header: string, key: string): string | null {
+  const re = new RegExp(`${key}\\s*=\\s*("([^"]*)"|([^\\s,]+))`, 'i');
+  const m = header.match(re);
+  if (!m) return null;
+  // Match group 2 = quoted value (without quotes), group 3 = unquoted value
+  return m[2] ?? m[3] ?? null;
+}
+
+export class AuthScopeStepUpScenario implements ClientScenario {
+  name = 'auth-scope-step-up';
+  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  description = `Test that an MCP server enforces per-tool scope requirements and advertises the missing scope in WWW-Authenticate per SEP-2350 + RFC 6750 §3.1.
+
+**Server Implementation Requirements:**
+
+When a client invokes a scope-gated method (e.g., \`tools/call\` for a
+tool with declared required scopes) using a Bearer token whose
+\`scope\` claim doesn't include the required scope:
+
+- The server MUST reject the request with HTTP 403 Forbidden (RFC 6750
+  §3.1 — distinct from HTTP 401 used for authentication failures).
+- The 403 response MUST carry a \`WWW-Authenticate\` header with the
+  \`Bearer\` scheme and:
+  - \`error="insufficient_scope"\` (RFC 6750 §3.1) — the standard error
+    code for scope failures.
+  - \`scope="..."\` listing the missing scope (or the union of all
+    scopes needed for the operation, per SEP-2350) — clients use this
+    to drive scope step-up by acquiring a new token with the broader
+    scope.
+- When the same operation is invoked with a token whose scope claim
+  includes the required scope, the server MUST allow the call past the
+  scope gate (HTTP not 403).
+- The advertised scope value MUST reflect the actual missing scope for
+  the requested operation — different operations advertise different
+  scopes.
+
+This scenario reads three optional env vars supplying tokens at
+different scope levels:
+
+  AUTH_VALID_TOKEN       — minimal scope (\`read\` on the auth fixture)
+  AUTH_READWRITE_TOKEN   — scope union for \`read\` + \`write\`
+  AUTH_FULL_TOKEN        — scope union for \`read\` + \`write\` + \`admin\`
+
+Each check emits \`INFO\` if its required token is unset.
+
+The scenario also exercises a session-bound flow: tools/call requires
+an initialized session (Mcp-Session-Id header), so each check
+initializes a fresh session with its respective token before issuing
+the scope-checked tools/call.`;
+
+  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+    const checks: ConformanceCheck[] = [];
+
+    const tokenRead = process.env.AUTH_VALID_TOKEN ?? null;
+    const tokenReadWrite = process.env.AUTH_READWRITE_TOKEN ?? null;
+    const tokenFull = process.env.AUTH_FULL_TOKEN ?? null;
+
+    // Check 1: insufficient scope rejected with 403.
+    let firstInsufficient: PostResult | null = null;
+    {
+      const id = 'auth-scope-step-up-insufficient-scope-rejected';
+      const name = 'AuthScopeStepUpInsufficientScopeRejected';
+      const description =
+        'tools/call to a scope-gated tool with a Bearer token whose `scope` claim lacks the required scope MUST be rejected with HTTP 403 Forbidden (RFC 6750 §3.1)';
+      if (tokenRead === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_VALID_TOKEN unset; cannot exercise scope-step-up rejection path. Set AUTH_VALID_TOKEN to a token whose scope claim is insufficient for `write-tool`.',
+          specReferences: [SEP_2350_REF, RFC_6750_REF]
+        });
+      } else {
+        try {
+          const session = await initializeSession(serverUrl, tokenRead);
+          if (!session.sessionId) {
+            checks.push({
+              id,
+              name,
+              description,
+              status: 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: `initialize did not return Mcp-Session-Id (status ${session.status}); cannot drive scope check`,
+              specReferences: [SEP_2350_REF]
+            });
+          } else {
+            const r = await postToolsCallWithSession(
+              serverUrl,
+              tokenRead,
+              session.sessionId,
+              'write-tool',
+              {}
+            );
+            firstInsufficient = r;
+            const errs: string[] = [];
+            if (r.status !== 403) {
+              errs.push(
+                `status MUST be 403 for insufficient scope; got ${r.status}`
+              );
+            }
+            checks.push({
+              id,
+              name,
+              description,
+              status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+              specReferences: [SEP_2350_REF, RFC_6750_REF],
+              details: { httpStatus: r.status }
+            });
+          }
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [SEP_2350_REF, RFC_6750_REF]
+          });
+        }
+      }
+    }
+
+    // Check 2: 403 carries WWW-Authenticate with error="insufficient_scope".
+    {
+      const id = 'auth-scope-step-up-www-authenticate-error';
+      const name = 'AuthScopeStepUpWwwAuthenticateError';
+      const description =
+        '403 response on insufficient scope MUST carry WWW-Authenticate: Bearer with error="insufficient_scope" (RFC 6750 §3.1)';
+      const errs: string[] = [];
+      if (firstInsufficient === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'no 403 response captured (Check 1 INFO/FAILURE); cannot validate WWW-Authenticate',
+          specReferences: [RFC_6750_REF]
+        });
+      } else {
+        const wa = firstInsufficient.wwwAuthenticate;
+        if (wa === null || wa === '') {
+          errs.push(
+            '403 response MUST carry a WWW-Authenticate header (RFC 6750 §3.1)'
+          );
+        } else if (!/^bearer/i.test(wa.trim())) {
+          errs.push(
+            `WWW-Authenticate MUST advertise the Bearer scheme; got "${wa}"`
+          );
+        } else {
+          const errParam = getAuthParam(wa, 'error');
+          if (errParam !== 'insufficient_scope') {
+            errs.push(
+              `WWW-Authenticate MUST carry error="insufficient_scope" (RFC 6750 §3.1); got error=${JSON.stringify(errParam)}`
+            );
+          }
+        }
+        checks.push({
+          id,
+          name,
+          description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: [RFC_6750_REF],
+          details: { wwwAuthenticate: wa }
+        });
+      }
+    }
+
+    // Check 3: WWW-Authenticate advertises the missing scope.
+    {
+      const id = 'auth-scope-step-up-www-authenticate-advertises-scope';
+      const name = 'AuthScopeStepUpWwwAuthenticateAdvertisesScope';
+      const description =
+        'WWW-Authenticate on insufficient-scope 403 MUST carry a `scope` parameter listing the missing scope (SEP-2350; clients use this to drive scope step-up)';
+      const errs: string[] = [];
+      if (firstInsufficient === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'no 403 response captured (Check 1 INFO/FAILURE); cannot validate scope advertisement',
+          specReferences: [SEP_2350_REF, RFC_6750_REF]
+        });
+      } else {
+        const wa = firstInsufficient.wwwAuthenticate ?? '';
+        const scopeParam = getAuthParam(wa, 'scope');
+        if (scopeParam === null || scopeParam === '') {
+          errs.push(
+            'WWW-Authenticate MUST carry a `scope` parameter so clients can drive step-up'
+          );
+        } else {
+          // The advertised scope MUST contain the missing scope
+          // (here: `write` for `write-tool`). Either verbatim or as
+          // part of a space-separated union per SEP-2350.
+          const advertised = scopeParam.split(/\s+/).filter(Boolean);
+          if (!advertised.includes('write')) {
+            errs.push(
+              `WWW-Authenticate scope parameter MUST include the missing scope (\`write\`); got "${scopeParam}"`
+            );
+          }
+        }
+        checks.push({
+          id,
+          name,
+          description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: [SEP_2350_REF, RFC_6750_REF],
+          details: { advertisedScope: scopeParam }
+        });
+      }
+    }
+
+    // Check 4: sufficient scope accepted (not 403).
+    {
+      const id = 'auth-scope-step-up-sufficient-scope-accepted';
+      const name = 'AuthScopeStepUpSufficientScopeAccepted';
+      const description =
+        'tools/call to a scope-gated tool with a Bearer token whose `scope` claim INCLUDES the required scope MUST NOT be rejected for scope reasons (HTTP not 403)';
+      if (tokenReadWrite === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_READWRITE_TOKEN unset; cannot exercise scope-step-up acceptance path. Set AUTH_READWRITE_TOKEN to a token whose scope claim covers `read write`.',
+          specReferences: [SEP_2350_REF]
+        });
+      } else {
+        try {
+          const session = await initializeSession(serverUrl, tokenReadWrite);
+          if (!session.sessionId) {
+            checks.push({
+              id,
+              name,
+              description,
+              status: 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: `initialize did not return Mcp-Session-Id (status ${session.status}); cannot drive scope check`,
+              specReferences: [SEP_2350_REF]
+            });
+          } else {
+            const r = await postToolsCallWithSession(
+              serverUrl,
+              tokenReadWrite,
+              session.sessionId,
+              'write-tool',
+              {}
+            );
+            const errs: string[] = [];
+            if (r.status === 403) {
+              errs.push(
+                `sufficient scope still rejected with 403; fixture says "${r.bodyText.slice(0, 120)}"`
+              );
+            }
+            checks.push({
+              id,
+              name,
+              description,
+              status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+              specReferences: [SEP_2350_REF],
+              details: { httpStatus: r.status }
+            });
+          }
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [SEP_2350_REF]
+          });
+        }
+      }
+    }
+
+    // Check 5: scope advertisement varies by tool (admin-tool wants
+    // `admin`, write-tool wants `write`). Sanity check that the server
+    // is computing the missing scope per-operation, not advertising a
+    // static placeholder.
+    {
+      const id = 'auth-scope-step-up-scope-varies-by-tool';
+      const name = 'AuthScopeStepUpScopeVariesByTool';
+      const description =
+        'WWW-Authenticate `scope` parameter MUST reflect the actual scope required by the requested operation — different operations MUST advertise different scopes (SEP-2350)';
+      if (tokenRead === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_VALID_TOKEN unset; cannot exercise scope-varies-by-tool sanity check.',
+          specReferences: [SEP_2350_REF]
+        });
+      } else {
+        try {
+          const session = await initializeSession(serverUrl, tokenRead);
+          if (!session.sessionId) {
+            checks.push({
+              id,
+              name,
+              description,
+              status: 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: `initialize did not return Mcp-Session-Id (status ${session.status})`,
+              specReferences: [SEP_2350_REF]
+            });
+          } else {
+            const adminResp = await postToolsCallWithSession(
+              serverUrl,
+              tokenRead,
+              session.sessionId,
+              'admin-tool',
+              {}
+            );
+            const errs: string[] = [];
+            if (adminResp.status !== 403) {
+              errs.push(
+                `admin-tool with read-only token MUST return 403; got ${adminResp.status}`
+              );
+            } else {
+              const adminScope = getAuthParam(
+                adminResp.wwwAuthenticate ?? '',
+                'scope'
+              );
+              const adminAdvertised = (adminScope ?? '')
+                .split(/\s+/)
+                .filter(Boolean);
+              if (!adminAdvertised.includes('admin')) {
+                errs.push(
+                  `admin-tool advertised scope MUST include \`admin\`; got "${adminScope}"`
+                );
+              }
+              // Compare with Check 1's write-tool advertisement.
+              if (firstInsufficient !== null) {
+                const writeScope = getAuthParam(
+                  firstInsufficient.wwwAuthenticate ?? '',
+                  'scope'
+                );
+                if (writeScope === adminScope) {
+                  errs.push(
+                    `admin-tool and write-tool advertised the same scope ("${adminScope}"); fixture is using a static placeholder rather than computing per-operation`
+                  );
+                }
+              }
+            }
+            checks.push({
+              id,
+              name,
+              description,
+              status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+              timestamp: new Date().toISOString(),
+              errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+              specReferences: [SEP_2350_REF],
+              details: {
+                adminToolScope: getAuthParam(
+                  adminResp.wwwAuthenticate ?? '',
+                  'scope'
+                ),
+                writeToolScope: getAuthParam(
+                  firstInsufficient?.wwwAuthenticate ?? '',
+                  'scope'
+                )
+              }
+            });
+          }
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [SEP_2350_REF]
+          });
+        }
+      }
+    }
+
+    // Suppress unused-variable warning when AUTH_FULL_TOKEN isn't read
+    // by this scenario directly. It's exposed for future Phase 3
+    // scenarios that exercise admin-only flows.
+    void tokenFull;
+
+    return checks;
+  }
+}
