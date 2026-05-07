@@ -1438,3 +1438,330 @@ the scope-checked tools/call.`;
     return checks;
   }
 }
+
+// =============================================================================
+// Phase 3b — RFC 9207 OAuth iss parameter (SEP-2468)
+// =============================================================================
+// Phase 3c — Enterprise-managed auth (RFC 8693 token-exchange + RFC 7523
+//                                     JWT bearer)
+// =============================================================================
+//
+// These two scenarios document the conformance surface up-front so the
+// behavior is testable as soon as a fixture supports it. Today's
+// reference fixture (mcpkit's examples/auth/) does not yet implement
+// either RFC; the metadata-layer checks therefore emit SKIPPED with a
+// link to the tracking issue, not FAILURE — that's "spec requirement,
+// not yet supported by this fixture" rather than "spec violation."
+//
+// The flow-layer checks (driving an actual OAuth code redirect for
+// RFC 9207, or a token-exchange call for RFC 8693) are stubbed as
+// SKIPPED until the conformance suite grows an OAuth flow-driver.
+// That driver is a meatier infrastructure decision that lands
+// separately.
+//
+// As implementations land (mcpkit issues 380 / 381) the metadata
+// checks flip from SKIPPED to SUCCESS based on the AS's advertised
+// capabilities. The flow-layer checks flip when the driver lands.
+
+const RFC_9207_REF: SpecReference = {
+  id: 'RFC-9207',
+  url: 'https://datatracker.ietf.org/doc/html/rfc9207'
+};
+const RFC_8693_REF: SpecReference = {
+  id: 'RFC-8693',
+  url: 'https://datatracker.ietf.org/doc/html/rfc8693'
+};
+const RFC_7523_REF: SpecReference = {
+  id: 'RFC-7523',
+  url: 'https://datatracker.ietf.org/doc/html/rfc7523'
+};
+
+const TOKEN_EXCHANGE_GRANT =
+  'urn:ietf:params:oauth:grant-type:token-exchange';
+const JWT_BEARER_GRANT = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
+
+interface AsMetadataFetch {
+  body: any | null;
+  chosenUrl: string | null;
+  attempts: Array<{ url: string; status: number | null; error?: string }>;
+}
+
+/**
+ * Discover the AS metadata for the resource at `serverUrl`. Tries the
+ * resource's own origin first (RFC 8414 same-origin proxy is common);
+ * if that 404s, falls back to each `authorization_servers` entry
+ * advertised in the resource's PRM.
+ */
+async function fetchAsMetadata(serverUrl: string): Promise<AsMetadataFetch> {
+  const origin = originOf(serverUrl);
+  const attempts: AsMetadataFetch['attempts'] = [];
+
+  // PRM gives us the off-origin AS candidates.
+  let prmBody: any = null;
+  try {
+    const r = await fetchJson(
+      `${origin}/.well-known/oauth-protected-resource`
+    );
+    if (r.status === 200 && r.body) prmBody = r.body;
+  } catch {
+    /* ignore — PRM unreachable, fall through to same-origin probe */
+  }
+
+  const candidates: string[] = [
+    `${origin}/.well-known/oauth-authorization-server`
+  ];
+  if (Array.isArray(prmBody?.authorization_servers)) {
+    for (const advertised of prmBody.authorization_servers) {
+      if (typeof advertised !== 'string') continue;
+      try {
+        const advUrl = `${originOf(advertised)}/.well-known/oauth-authorization-server`;
+        if (!candidates.includes(advUrl)) candidates.push(advUrl);
+      } catch {
+        /* skip malformed advertised URL */
+      }
+    }
+  }
+
+  for (const url of candidates) {
+    try {
+      const r = await fetchJson(url);
+      attempts.push({ url, status: r.status });
+      if (r.status === 200 && r.body) {
+        return { body: r.body, chosenUrl: url, attempts };
+      }
+    } catch (error) {
+      attempts.push({
+        url,
+        status: null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  return { body: null, chosenUrl: null, attempts };
+}
+
+export class AuthIssParamScenario implements ClientScenario {
+  name = 'auth-iss-param';
+  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  description = `Test that an MCP server's Authorization Server implements RFC 9207 OAuth 2.0 Authorization Server Issuer Identification.
+
+**Server Implementation Requirements:**
+
+RFC 9207 mitigates mix-up attacks against clients that interact with
+multiple Authorization Servers. The AS:
+
+- MUST advertise \`authorization_response_iss_parameter_supported: true\`
+  in its RFC 8414 metadata (RFC 9207 §3) so clients know to enforce
+  iss validation.
+- MUST include an \`iss\` query parameter (whose value is the AS's
+  issuer identifier) on every authorization response — both successful
+  redirects (with \`code\`) and error redirects.
+
+**Phase 3b status:**
+
+This scenario currently emits \`SKIPPED\` when the fixture's AS doesn't
+advertise RFC 9207 support — that's "feature not yet supported, gap
+tracked by mcpkit issue 380" rather than "spec violation." When the
+AS adds the advertisement, this check flips to \`SUCCESS\`. The
+end-to-end flow check (verifying \`iss\` actually appears in the
+redirect) is currently stubbed as \`SKIPPED\` until the conformance
+suite grows an OAuth code-flow driver.`;
+
+  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+    const checks: ConformanceCheck[] = [];
+    const meta = await fetchAsMetadata(serverUrl);
+
+    // Check 1: AS metadata advertises RFC 9207 support.
+    {
+      const id = 'auth-iss-param-as-metadata-advertises-support';
+      const name = 'AuthIssParamAsMetadataAdvertisesSupport';
+      const description =
+        'AS metadata MUST advertise `authorization_response_iss_parameter_supported: true` (RFC 9207 §3) so clients know to enforce iss validation';
+      if (meta.body === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage: `AS metadata unreachable; cannot verify RFC 9207 advertisement. Attempts: ${JSON.stringify(meta.attempts)}`,
+          specReferences: [RFC_9207_REF, RFC_8414_REF]
+        });
+      } else if (meta.body.authorization_response_iss_parameter_supported === true) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          specReferences: [RFC_9207_REF, RFC_8414_REF],
+          details: { chosenUrl: meta.chosenUrl }
+        });
+      } else {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'SKIPPED',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AS metadata does not advertise `authorization_response_iss_parameter_supported: true` — RFC 9207 not yet supported by this fixture. Tracked by mcpkit issue 380. Will flip to SUCCESS when the AS adds the advertisement.',
+          specReferences: [RFC_9207_REF, RFC_8414_REF],
+          details: {
+            chosenUrl: meta.chosenUrl,
+            advertisedValue:
+              meta.body.authorization_response_iss_parameter_supported
+          }
+        });
+      }
+    }
+
+    // Check 2: end-to-end iss in redirect — pending OAuth flow driver.
+    {
+      const id = 'auth-iss-param-redirect-carries-iss';
+      const name = 'AuthIssParamRedirectCarriesIss';
+      const description =
+        'Authorization response (both successful and error redirects) MUST carry `iss` query parameter whose value is the AS issuer (RFC 9207 §2)';
+      checks.push({
+        id,
+        name,
+        description,
+        status: 'SKIPPED',
+        timestamp: new Date().toISOString(),
+        errorMessage:
+          'Driving an auth code flow to verify `iss` in the redirect requires an OAuth flow driver in the conformance test runner; not yet implemented. Will flip to SUCCESS / FAILURE when the driver lands. Tracked alongside mcpkit issue 380.',
+        specReferences: [RFC_9207_REF]
+      });
+    }
+
+    return checks;
+  }
+}
+
+export class AuthEnterpriseManagedScenario implements ClientScenario {
+  name = 'auth-enterprise-managed';
+  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  description = `Test that an MCP server's Authorization Server supports the OAuth grant types required for enterprise-managed identity flows: RFC 8693 token-exchange and RFC 7523 JWT bearer client/auth grant.
+
+**Server Implementation Requirements:**
+
+Enterprise-managed deployments typically chain a federated identity
+JWT (issued by a corporate IdP) into an MCP-server access token via:
+
+- **RFC 8693 OAuth 2.0 Token Exchange** —
+  \`grant_type=urn:ietf:params:oauth:grant-type:token-exchange\` swaps
+  one token for another (e.g., upstream IdP token → MCP-scoped token).
+- **RFC 7523 JWT Bearer Grant** —
+  \`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer\` authorizes
+  using a JWT assertion; commonly used to assert the upstream identity
+  while requesting the swapped token.
+
+The AS:
+
+- SHOULD list both grant types in \`grant_types_supported\` so clients
+  can detect support without an out-of-band agreement.
+- MUST honor each grant per its respective RFC at the token endpoint.
+
+**Phase 3c status:**
+
+This scenario currently emits \`SKIPPED\` for both metadata-layer checks
+when the fixture's AS doesn't advertise either grant — that's "feature
+not yet supported, gap tracked by mcpkit issue 381" rather than "spec
+violation." When the AS adds the grants, the checks flip to
+\`SUCCESS\`. The end-to-end flow check (driving a real token-exchange
+call and verifying the response shape) is stubbed as \`SKIPPED\` until
+the conformance suite grows a token-flow driver.`;
+
+  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+    const checks: ConformanceCheck[] = [];
+    const meta = await fetchAsMetadata(serverUrl);
+
+    interface GrantCase {
+      id: string;
+      name: string;
+      description: string;
+      grantUri: string;
+      ref: SpecReference;
+      issueRef: string;
+    }
+
+    const grantCases: GrantCase[] = [
+      {
+        id: 'auth-enterprise-managed-token-exchange-grant-supported',
+        name: 'AuthEnterpriseManagedTokenExchangeGrantSupported',
+        description: `AS metadata SHOULD advertise \`${TOKEN_EXCHANGE_GRANT}\` in \`grant_types_supported\` (RFC 8693)`,
+        grantUri: TOKEN_EXCHANGE_GRANT,
+        ref: RFC_8693_REF,
+        issueRef: 'mcpkit issue 381'
+      },
+      {
+        id: 'auth-enterprise-managed-jwt-bearer-grant-supported',
+        name: 'AuthEnterpriseManagedJwtBearerGrantSupported',
+        description: `AS metadata SHOULD advertise \`${JWT_BEARER_GRANT}\` in \`grant_types_supported\` (RFC 7523)`,
+        grantUri: JWT_BEARER_GRANT,
+        ref: RFC_7523_REF,
+        issueRef: 'mcpkit issue 381'
+      }
+    ];
+
+    for (const tc of grantCases) {
+      if (meta.body === null) {
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage: `AS metadata unreachable; cannot verify ${tc.grantUri} advertisement. Attempts: ${JSON.stringify(meta.attempts)}`,
+          specReferences: [tc.ref, RFC_8414_REF]
+        });
+        continue;
+      }
+      const grants = Array.isArray(meta.body.grant_types_supported)
+        ? (meta.body.grant_types_supported as string[])
+        : [];
+      if (grants.includes(tc.grantUri)) {
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          specReferences: [tc.ref, RFC_8414_REF],
+          details: { chosenUrl: meta.chosenUrl, advertisedGrants: grants }
+        });
+      } else {
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          description: tc.description,
+          status: 'SKIPPED',
+          timestamp: new Date().toISOString(),
+          errorMessage: `AS metadata does not advertise \`${tc.grantUri}\` in grant_types_supported — feature not yet supported by this fixture. Tracked by ${tc.issueRef}. Will flip to SUCCESS when the AS adds the grant. Currently advertised: ${JSON.stringify(grants)}`,
+          specReferences: [tc.ref, RFC_8414_REF],
+          details: { chosenUrl: meta.chosenUrl, advertisedGrants: grants }
+        });
+      }
+    }
+
+    // Flow-layer check — pending token-flow driver.
+    {
+      const id = 'auth-enterprise-managed-token-exchange-flow-shape';
+      const name = 'AuthEnterpriseManagedTokenExchangeFlowShape';
+      const description =
+        'Token endpoint MUST honor token-exchange (RFC 8693) and jwt-bearer (RFC 7523) grants and return access_token + token_type per the respective RFCs';
+      checks.push({
+        id,
+        name,
+        description,
+        status: 'SKIPPED',
+        timestamp: new Date().toISOString(),
+        errorMessage:
+          'Driving an end-to-end token-exchange flow requires a token-flow driver in the conformance test runner; not yet implemented. Will flip to SUCCESS / FAILURE when the driver lands. Tracked alongside mcpkit issue 381.',
+        specReferences: [RFC_8693_REF, RFC_7523_REF]
+      });
+    }
+
+    return checks;
+  }
+}

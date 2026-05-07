@@ -45,6 +45,8 @@ import { ServerSSEPollingScenario } from './server/sse-polling';
 import { FileInputsScenario } from './server/file-inputs/file-inputs';
 import { ListTtlScenario } from './server/list-ttl/list-ttl';
 import {
+  AuthEnterpriseManagedScenario,
+  AuthIssParamScenario,
   AuthJwtClaimsScenario,
   AuthJwtValidationScenario,
   AuthOAuthDiscoveryScenario,
@@ -106,7 +108,7 @@ const pendingClientScenariosList: ClientScenario[] = [
   // pointing at the three fixtures.
   new ListTtlScenario(),
 
-  // MCP Auth — server-side conformance (Phases 1 + 2 + 2.5 + 3a so far).
+  // MCP Auth — server-side conformance (Phases 1 + 2 + 2.5 + 3a + 3b + 3c).
   // Phase 1 (auth-oauth-discovery): RFC 9728 PRM + RFC 8414 AS metadata.
   // Phase 2 (auth-jwt-validation): RFC 6750 Bearer token validation —
   //   401 + WWW-Authenticate, malformed/tampered/valid-token paths.
@@ -114,6 +116,12 @@ const pendingClientScenariosList: ClientScenario[] = [
   //   expired (exp), wrong-audience (aud), wrong-issuer (iss).
   // Phase 3a (auth-scope-step-up): SEP-2350 + RFC 6750 §3.1 — 403 +
   //   error="insufficient_scope" + scope="..." advertisement.
+  // Phase 3b (auth-iss-param): RFC 9207 OAuth iss parameter (SEP-2468)
+  //   — metadata advertisement + redirect-iss flow check (latter
+  //   stubbed INFO until OAuth flow driver lands).
+  // Phase 3c (auth-enterprise-managed): RFC 8693 token-exchange + RFC
+  //   7523 JWT bearer grant — metadata advertisement of both grant
+  //   types + token-exchange flow check (latter stubbed INFO).
   // Skipped from default runs because the upstream everything-server
   // doesn't expose the auth surface. Run via the dedicated auth.test.ts
   // harness with AUTH_SERVER_URL; the token-needing checks additionally
@@ -121,7 +129,9 @@ const pendingClientScenariosList: ClientScenario[] = [
   new AuthOAuthDiscoveryScenario(),
   new AuthJwtValidationScenario(),
   new AuthJwtClaimsScenario(),
-  new AuthScopeStepUpScenario()
+  new AuthScopeStepUpScenario(),
+  new AuthIssParamScenario(),
+  new AuthEnterpriseManagedScenario()
 ];
 
 // All client scenarios

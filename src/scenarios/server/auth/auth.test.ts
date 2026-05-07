@@ -28,6 +28,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
+  AuthEnterpriseManagedScenario,
+  AuthIssParamScenario,
   AuthJwtClaimsScenario,
   AuthJwtValidationScenario,
   AuthOAuthDiscoveryScenario,
@@ -45,7 +47,9 @@ const AUTH_SCENARIOS = [
   new AuthOAuthDiscoveryScenario(),
   new AuthJwtValidationScenario(),
   new AuthJwtClaimsScenario(),
-  new AuthScopeStepUpScenario()
+  new AuthScopeStepUpScenario(),
+  new AuthIssParamScenario(),
+  new AuthEnterpriseManagedScenario()
 ];
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;

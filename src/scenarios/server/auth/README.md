@@ -2,14 +2,16 @@
 
 Tests an MCP server's OAuth 2.0 discovery surface required by the MCP authorization spec (2025-11-25).
 
-Four ClientScenarios so far, in priority order:
+Six ClientScenarios so far, in priority order:
 
 - **Phase 1 — `auth-oauth-discovery`**: read-only RFC 9728 PRM + RFC 8414 AS metadata. No token flows. (5 checks)
 - **Phase 2 — `auth-jwt-validation`**: RFC 6750 Bearer-token enforcement on auth-gated methods. No-token / malformed / tampered / valid-token paths. (5 checks; 2 emit INFO without `AUTH_VALID_TOKEN`)
 - **Phase 2.5 — `auth-jwt-claims`**: RFC 7519 standard claim validation. Expired (`exp`), wrong-audience (`aud`), wrong-issuer (`iss`) — each must be rejected even though the JWT signature verifies. (3 checks; each emits INFO without its corresponding `AUTH_{EXPIRED,WRONG_AUDIENCE,WRONG_ISSUER}_TOKEN`)
 - **Phase 3a — `auth-scope-step-up`**: SEP-2350 + RFC 6750 §3.1 scope enforcement. 403 + `error="insufficient_scope"` + `scope="..."` advertisement. (5 checks; require `AUTH_VALID_TOKEN` and/or `AUTH_READWRITE_TOKEN` to fully exercise)
+- **Phase 3b — `auth-iss-param`**: RFC 9207 OAuth iss parameter (SEP-2468). Metadata advertisement + redirect-iss flow check. (2 checks; emit SKIPPED until the AS advertises support and the conformance suite grows an OAuth code-flow driver)
+- **Phase 3c — `auth-enterprise-managed`**: RFC 8693 token-exchange + RFC 7523 JWT bearer grants. Metadata advertisement of both grants + token-exchange flow check. (3 checks; emit SKIPPED until the AS advertises the grants and the suite grows a token-flow driver)
 
-All four tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
+All six tagged `['extension', LATEST_SPEC_VERSION]` and registered in `pendingClientScenariosList` so default `all-scenarios.test.ts` runs against the upstream `everything-server` skip this suite.
 
 ## ClientScenario classes
 
@@ -63,6 +65,27 @@ Each token shape is a deliberate single-claim violation — the signature is val
 | `auth-scope-step-up-sufficient-scope-accepted`         | `tools/call` to `write-tool` with `read+write` token → HTTP not 403 (allowed past scope gate). INFO when `AUTH_READWRITE_TOKEN` env unset                                                             |
 | `auth-scope-step-up-scope-varies-by-tool`              | `admin-tool` advertises `admin` and `write-tool` advertises `write` — server MUST compute the missing scope per-operation, not advertise a static placeholder. INFO when `AUTH_VALID_TOKEN` env unset |
 
+### `auth-iss-param` (`auth.ts`)
+
+2 internal `ConformanceCheck` records covering RFC 9207 OAuth 2.0 Authorization Server Issuer Identification (SEP-2468) — mitigates mix-up attacks against clients that talk to multiple ASes.
+
+| Check                                              | What it tests                                                                                                                                  |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-iss-param-as-metadata-advertises-support`    | AS metadata advertises `authorization_response_iss_parameter_supported: true` (RFC 9207 §3). SKIPPED until the AS adds it (mcpkit issue 380)   |
+| `auth-iss-param-redirect-carries-iss`              | Authorization redirect carries `iss` query parameter (RFC 9207 §2). SKIPPED until the conformance suite grows an OAuth code-flow driver        |
+
+### `auth-enterprise-managed` (`auth.ts`)
+
+3 internal `ConformanceCheck` records covering RFC 8693 OAuth 2.0 Token Exchange + RFC 7523 JWT Bearer grant for enterprise-managed identity flows (federated-IdP-JWT → MCP-scoped-access-token chains).
+
+| Check                                                       | What it tests                                                                                                                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-enterprise-managed-token-exchange-grant-supported`    | AS metadata's `grant_types_supported` includes `urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). SKIPPED until the AS adds the grant (mcpkit issue 381)    |
+| `auth-enterprise-managed-jwt-bearer-grant-supported`        | AS metadata's `grant_types_supported` includes `urn:ietf:params:oauth:grant-type:jwt-bearer` (RFC 7523). SKIPPED until the AS adds the grant (mcpkit issue 381)        |
+| `auth-enterprise-managed-token-exchange-flow-shape`         | Token endpoint honors token-exchange + jwt-bearer grants and returns `access_token` + `token_type` per the respective RFCs. SKIPPED until the suite grows a flow driver |
+
+**Why SKIPPED rather than FAILURE for unsupported features?** This is the "build the tests, mark them as known gaps until the implementation is done" pattern — analogous to mcpkit's `conformance/baseline.yml` for the upstream client suite. Each gap-emission carries a clear tracking link so it's obvious what would flip the SKIPPED to SUCCESS.
+
 ## Required server fixture
 
 The fixture server MUST expose:
@@ -113,8 +136,8 @@ Token acquisition is fixture-specific: the test runner is responsible for obtain
 | 2     | `auth-jwt-validation` (no-token / malformed / tampered / valid-token)           | shipped                                |
 | 2.5   | `auth-jwt-claims` (audience, expiry, issuer)                                    | shipped                                |
 | 3a    | `auth-scope-step-up` (SEP-2350: 403 + scope advertisement)                      | shipped                                |
-| 3b    | `auth-iss-param` (RFC 9207, SEP-2468)                                           | planned, needs OAuth code flow driver  |
-| 3c    | `auth-enterprise-managed` (RFC 8693 token exchange + RFC 7523 JWT bearer chain) | planned, needs OAuth token-flow driver |
+| 3b    | `auth-iss-param` (RFC 9207, SEP-2468)                                           | shipped (metadata-layer active; flow-layer SKIPPED until OAuth code-flow driver lands) |
+| 3c    | `auth-enterprise-managed` (RFC 8693 token exchange + RFC 7523 JWT bearer chain) | shipped (metadata-layer active; flow-layer SKIPPED until OAuth token-flow driver lands) |
 
 Phase 2 + 2.5 + 3a need the fixture to mint pre-issued tokens at multiple scope levels plus deliberately-bad-claim variants; the test runner exposes each as a separate `AUTH_*_TOKEN` env var. Phase 3a additionally needs at least two scope-gated tools (`write-tool` + `admin-tool`) to verify scope advertisement varies per-operation.
 
