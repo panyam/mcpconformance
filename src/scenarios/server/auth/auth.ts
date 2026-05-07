@@ -439,9 +439,22 @@ and scope step-up are separate scenarios.`;
 /**
  * Tampers a Bearer token's signature so the JWS verification fails
  * while keeping the JWT's structural shape intact (3 dot-separated
- * parts). Flips the last character of the signature segment to a
- * different valid base64url character — that's enough to break HMAC
- * and asymmetric verification without changing the header or payload.
+ * parts) AND keeping the signature segment a structurally valid
+ * base64url-encoded byte string.
+ *
+ * We flip a character in the MIDDLE of the signature segment — middle
+ * chars represent full 6-bit base64 groups, so any flip among the
+ * base64url alphabet [A-Za-z0-9_-] yields another valid 6-bit group
+ * (the resulting decoded bytes simply won't match the expected
+ * signature, giving a clean "signature verification failed" rather
+ * than a "malformed token" parse error).
+ *
+ * Tampering the LAST character is unsafe: in an RS256 (256-byte)
+ * signature the last base64 char encodes only the low 2 bits of the
+ * final byte plus 4 padding bits — only chars whose binary is XX0000
+ * (A/Q/g/w) are valid 1-byte tails. Other chars there make the
+ * signature structurally invalid base64, which strict decoders reject
+ * with HTTP 400 before signature verification runs.
  */
 function tamperJwtSignature(token: string): string {
   const parts = token.split('.');
@@ -451,10 +464,10 @@ function tamperJwtSignature(token: string): string {
     );
   }
   const sig = parts[2];
-  const last = sig[sig.length - 1];
-  // Flip last char to a different base64url char.
-  const replacement = last === 'A' ? 'B' : 'A';
-  parts[2] = sig.slice(0, -1) + replacement;
+  const mid = Math.floor(sig.length / 2);
+  const orig = sig[mid];
+  const replacement = orig === 'A' ? 'B' : 'A';
+  parts[2] = sig.slice(0, mid) + replacement + sig.slice(mid + 1);
   return parts.join('.');
 }
 
