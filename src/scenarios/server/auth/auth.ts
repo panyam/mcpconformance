@@ -40,6 +40,10 @@ const RFC_8414_REF: SpecReference = {
   id: 'RFC-8414',
   url: 'https://datatracker.ietf.org/doc/html/rfc8414'
 };
+const RFC_6750_REF: SpecReference = {
+  id: 'RFC-6750',
+  url: 'https://datatracker.ietf.org/doc/html/rfc6750'
+};
 const MCP_AUTH_REF: SpecReference = {
   id: 'mcp-spec-2025-11-25-authorization',
   url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization'
@@ -421,6 +425,357 @@ and scope step-up are separate scenarios.`;
           errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_8414_REF]
         });
+      }
+    }
+
+    return checks;
+  }
+}
+
+// =============================================================================
+// Phase 2 — JWT validation
+// =============================================================================
+
+/**
+ * Tampers a Bearer token's signature so the JWS verification fails
+ * while keeping the JWT's structural shape intact (3 dot-separated
+ * parts). Flips the last character of the signature segment to a
+ * different valid base64url character — that's enough to break HMAC
+ * and asymmetric verification without changing the header or payload.
+ */
+function tamperJwtSignature(token: string): string {
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts[2].length === 0) {
+    throw new Error(
+      `cannot tamper non-JWT token (expected 3 dot-separated parts, got ${parts.length})`
+    );
+  }
+  const sig = parts[2];
+  const last = sig[sig.length - 1];
+  // Flip last char to a different base64url char.
+  const replacement = last === 'A' ? 'B' : 'A';
+  parts[2] = sig.slice(0, -1) + replacement;
+  return parts.join('.');
+}
+
+interface PostResult {
+  status: number;
+  wwwAuthenticate: string | null;
+  contentType: string;
+  bodyText: string;
+}
+
+async function postToolsCall(
+  serverUrl: string,
+  token: string | null,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<PostResult> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream'
+  };
+  if (token !== null) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const resp = await fetch(serverUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: `auth-jwt-${Math.random().toString(36).slice(2, 10)}`,
+      method: 'tools/call',
+      params: { name: toolName, arguments: args }
+    })
+  });
+  return {
+    status: resp.status,
+    wwwAuthenticate: resp.headers.get('www-authenticate'),
+    contentType: resp.headers.get('content-type') ?? '',
+    bodyText: await resp.text()
+  };
+}
+
+export class AuthJwtValidationScenario implements ClientScenario {
+  name = 'auth-jwt-validation';
+  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  description = `Test that an MCP server enforces Bearer-token validation on auth-gated methods per the MCP authorization spec (2025-11-25) + RFC 6750.
+
+**Server Implementation Requirements:**
+
+**Unauthenticated requests rejected (RFC 6750 + MCP spec):**
+- A non-public method (e.g., \`tools/call\`) called without an
+  \`Authorization\` header MUST be rejected with HTTP 401 Unauthorized.
+- The 401 response MUST carry a \`WWW-Authenticate\` header with the
+  \`Bearer\` scheme (RFC 6750 §3) and SHOULD carry a
+  \`resource_metadata\` parameter pointing at the PRM document
+  (RFC 9728 §5.1).
+
+**Malformed and tampered tokens rejected:**
+- A garbage Bearer token (not a structurally valid JWT) MUST be
+  rejected with HTTP 401.
+- A structurally valid JWT with a tampered signature MUST be rejected
+  with HTTP 401 (signature verification is mandatory).
+
+**Valid tokens accepted:**
+- A request with a properly signed, unexpired token whose claims pass
+  validation (audience, issuer, scope) MUST be allowed past the auth
+  gate (HTTP 200 if the tool succeeds; not 401).
+
+This scenario reads an optional \`AUTH_VALID_TOKEN\` env var supplying
+a JWT good enough for the fixture's \`echo\` tool (which requires
+auth but no specific scope). When unset, valid- and tampered-token
+checks emit \`INFO\` rather than \`FAILURE\` — they're "couldn't
+verify" rather than "spec violation."
+
+Token-acquisition is fixture-specific: the test-runner is responsible
+for obtaining a valid token from the fixture (e.g., via a bootstrap
+endpoint, a token-endpoint flow, or pre-minted via env) and exporting
+it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
+
+  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+    const checks: ConformanceCheck[] = [];
+    const validToken = process.env.AUTH_VALID_TOKEN ?? null;
+
+    // Pre-flight: the test relies on `tools/call` being non-public on
+    // the fixture. We pin to the `echo` tool name (no specific scope)
+    // so JWT-validation behavior is observable independently of scope
+    // enforcement (Phase 3).
+    const TOOL = 'echo';
+    const ARGS = { message: 'auth-jwt-validation' };
+
+    // Check 1: no Authorization header → 401.
+    let firstNoAuth: PostResult | null = null;
+    {
+      const id = 'auth-jwt-validation-no-token-rejected';
+      const name = 'AuthJwtValidationNoTokenRejected';
+      const description =
+        'tools/call without Authorization header MUST be rejected with HTTP 401 (RFC 6750 + MCP authorization spec)';
+      try {
+        const r = await postToolsCall(serverUrl, null, TOOL, ARGS);
+        firstNoAuth = r;
+        const errs: string[] = [];
+        if (r.status !== 401) {
+          errs.push(`status MUST be 401; got ${r.status}`);
+        }
+        checks.push({
+          id,
+          name,
+          description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: [RFC_6750_REF, MCP_AUTH_REF],
+          details: { httpStatus: r.status }
+        });
+      } catch (error) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+          specReferences: [RFC_6750_REF, MCP_AUTH_REF]
+        });
+      }
+    }
+
+    // Check 2: 401 response carries WWW-Authenticate: Bearer ...
+    {
+      const id = 'auth-jwt-validation-www-authenticate-shape';
+      const name = 'AuthJwtValidationWwwAuthenticateShape';
+      const description =
+        '401 response MUST carry WWW-Authenticate: Bearer ... (RFC 6750 §3); SHOULD include resource_metadata parameter pointing at PRM (RFC 9728 §5.1)';
+      const errs: string[] = [];
+      const warnings: string[] = [];
+      if (firstNoAuth === null) {
+        errs.push('no 401 response captured to inspect');
+      } else if (firstNoAuth.status !== 401) {
+        errs.push(
+          `previous request did not return 401 (got ${firstNoAuth.status}); cannot validate WWW-Authenticate`
+        );
+      } else {
+        const wa = firstNoAuth.wwwAuthenticate;
+        if (wa === null || wa === '') {
+          errs.push(
+            '401 response MUST carry a WWW-Authenticate header (RFC 6750 §3)'
+          );
+        } else {
+          const lower = wa.toLowerCase();
+          if (!lower.startsWith('bearer')) {
+            errs.push(
+              `WWW-Authenticate MUST advertise the Bearer scheme; got "${wa}"`
+            );
+          }
+          if (!/resource_metadata\s*=/.test(lower)) {
+            warnings.push(
+              'WWW-Authenticate SHOULD carry a resource_metadata parameter (RFC 9728 §5.1) so clients can discover PRM from the 401'
+            );
+          }
+        }
+      }
+      checks.push({
+        id,
+        name,
+        description,
+        status: errs.length === 0 ? (warnings.length === 0 ? 'SUCCESS' : 'WARNING') : 'FAILURE',
+        timestamp: new Date().toISOString(),
+        errorMessage:
+          errs.length > 0
+            ? errs.join('; ')
+            : warnings.length > 0
+              ? warnings.join('; ')
+              : undefined,
+        specReferences: [RFC_6750_REF, RFC_9728_REF, MCP_AUTH_REF],
+        details: { wwwAuthenticate: firstNoAuth?.wwwAuthenticate }
+      });
+    }
+
+    // Check 3: malformed (non-JWT) token → 401.
+    {
+      const id = 'auth-jwt-validation-malformed-token-rejected';
+      const name = 'AuthJwtValidationMalformedTokenRejected';
+      const description =
+        'tools/call with a garbage Bearer token (not a structurally valid JWT) MUST be rejected with HTTP 401';
+      try {
+        const r = await postToolsCall(
+          serverUrl,
+          'this-is-definitely-not-a-jwt',
+          TOOL,
+          ARGS
+        );
+        const errs: string[] = [];
+        if (r.status !== 401) {
+          errs.push(
+            `status MUST be 401 for a garbage token; got ${r.status}`
+          );
+        }
+        checks.push({
+          id,
+          name,
+          description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: [RFC_6750_REF, MCP_AUTH_REF],
+          details: { httpStatus: r.status }
+        });
+      } catch (error) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+          specReferences: [RFC_6750_REF, MCP_AUTH_REF]
+        });
+      }
+    }
+
+    // Check 4: tampered (signature-broken) token → 401.
+    {
+      const id = 'auth-jwt-validation-tampered-token-rejected';
+      const name = 'AuthJwtValidationTamperedTokenRejected';
+      const description =
+        'tools/call with a JWT whose signature has been tampered MUST be rejected with HTTP 401 (signature verification is mandatory)';
+      if (validToken === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_VALID_TOKEN unset; cannot derive a tampered token to test signature verification. Set AUTH_VALID_TOKEN to a JWT the fixture accepts to enable this check.',
+          specReferences: [MCP_AUTH_REF]
+        });
+      } else {
+        try {
+          const tampered = tamperJwtSignature(validToken);
+          const r = await postToolsCall(serverUrl, tampered, TOOL, ARGS);
+          const errs: string[] = [];
+          if (r.status !== 401) {
+            errs.push(
+              `status MUST be 401 for a tampered token; got ${r.status}`
+            );
+          }
+          checks.push({
+            id,
+            name,
+            description,
+            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+            specReferences: [MCP_AUTH_REF],
+            details: { httpStatus: r.status }
+          });
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [MCP_AUTH_REF]
+          });
+        }
+      }
+    }
+
+    // Check 5: valid token accepted (not 401).
+    {
+      const id = 'auth-jwt-validation-valid-token-accepted';
+      const name = 'AuthJwtValidationValidTokenAccepted';
+      const description =
+        'tools/call with a properly signed, unexpired, claim-validated token MUST be allowed past the auth gate (HTTP not 401)';
+      if (validToken === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_VALID_TOKEN unset; cannot exercise the valid-token path. Set AUTH_VALID_TOKEN to a JWT the fixture accepts to enable this check.',
+          specReferences: [MCP_AUTH_REF]
+        });
+      } else {
+        try {
+          const r = await postToolsCall(serverUrl, validToken, TOOL, ARGS);
+          const errs: string[] = [];
+          if (r.status === 401) {
+            errs.push(
+              `valid token rejected (401); fixture says "${r.bodyText.slice(0, 120)}"`
+            );
+          }
+          checks.push({
+            id,
+            name,
+            description,
+            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+            specReferences: [MCP_AUTH_REF],
+            details: { httpStatus: r.status }
+          });
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [MCP_AUTH_REF]
+          });
+        }
       }
     }
 

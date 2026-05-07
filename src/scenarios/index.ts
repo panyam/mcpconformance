@@ -44,7 +44,10 @@ import { ServerSSEPollingScenario } from './server/sse-polling';
 
 import { FileInputsScenario } from './server/file-inputs/file-inputs';
 import { ListTtlScenario } from './server/list-ttl/list-ttl';
-import { AuthOAuthDiscoveryScenario } from './server/auth/auth';
+import {
+  AuthJwtValidationScenario,
+  AuthOAuthDiscoveryScenario
+} from './server/auth/auth';
 import { ServerSSEMultipleStreamsScenario } from './server/sse-multiple-streams';
 
 import {
@@ -101,13 +104,17 @@ const pendingClientScenariosList: ClientScenario[] = [
   // pointing at the three fixtures.
   new ListTtlScenario(),
 
-  // MCP Auth (server-side discovery). Phase 1 of the auth conformance
-  // pillar — read-only RFC 9728 PRM + RFC 8414 AS metadata. Skipped
-  // from default runs because the upstream everything-server doesn't
-  // expose the discovery surface. Run via the dedicated auth.test.ts
-  // harness with AUTH_SERVER_URL pointing at a fixture that mounts
-  // both well-known endpoints.
-  new AuthOAuthDiscoveryScenario()
+  // MCP Auth — server-side conformance (Phases 1 + 2 so far).
+  // Phase 1 (auth-oauth-discovery): RFC 9728 PRM + RFC 8414 AS metadata.
+  // Phase 2 (auth-jwt-validation): RFC 6750 Bearer token validation —
+  //   401 + WWW-Authenticate, malformed/tampered/valid-token paths.
+  // Skipped from default runs because the upstream everything-server
+  // doesn't expose the auth surface. Run via the dedicated auth.test.ts
+  // harness with AUTH_SERVER_URL pointing at a fixture; Phase 2's
+  // valid-token / tampered-token checks additionally need
+  // AUTH_VALID_TOKEN.
+  new AuthOAuthDiscoveryScenario(),
+  new AuthJwtValidationScenario()
 ];
 
 // All client scenarios
@@ -171,7 +178,8 @@ const allClientScenariosList: ClientScenario[] = [
   // above excludes them from the default everything-server run.
   new FileInputsScenario(),
   new ListTtlScenario(),
-  new AuthOAuthDiscoveryScenario()
+  new AuthOAuthDiscoveryScenario(),
+  new AuthJwtValidationScenario()
 ];
 
 // Active client scenarios (excludes pending)

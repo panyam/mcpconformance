@@ -27,7 +27,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AuthOAuthDiscoveryScenario } from './auth';
+import { AuthJwtValidationScenario, AuthOAuthDiscoveryScenario } from './auth';
 import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.AUTH_SERVER_URL;
@@ -36,7 +36,10 @@ const SERVER_STARTUP_TIMEOUT_MS = 15_000;
 const SHOULD_SPAWN = Boolean(SERVER_URL && SERVER_CMD);
 const HAVE_TARGET = Boolean(SERVER_URL);
 
-const AUTH_SCENARIOS = [new AuthOAuthDiscoveryScenario()];
+const AUTH_SCENARIOS = [
+  new AuthOAuthDiscoveryScenario(),
+  new AuthJwtValidationScenario()
+];
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;
 
