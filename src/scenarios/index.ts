@@ -44,6 +44,7 @@ import { ServerSSEPollingScenario } from './server/sse-polling';
 
 import { FileInputsScenario } from './server/file-inputs/file-inputs';
 import { ListTtlScenario } from './server/list-ttl/list-ttl';
+import { AuthOAuthDiscoveryScenario } from './server/auth/auth';
 import { ServerSSEMultipleStreamsScenario } from './server/sse-multiple-streams';
 
 import {
@@ -98,7 +99,15 @@ const pendingClientScenariosList: ClientScenario[] = [
   // explicit-zero / unset TTL) per the three-state contract. Run via the
   // dedicated list-ttl.test.ts harness with LIST_TTL_{POSITIVE,ZERO,UNSET}_URL
   // pointing at the three fixtures.
-  new ListTtlScenario()
+  new ListTtlScenario(),
+
+  // MCP Auth (server-side discovery). Phase 1 of the auth conformance
+  // pillar — read-only RFC 9728 PRM + RFC 8414 AS metadata. Skipped
+  // from default runs because the upstream everything-server doesn't
+  // expose the discovery surface. Run via the dedicated auth.test.ts
+  // harness with AUTH_SERVER_URL pointing at a fixture that mounts
+  // both well-known endpoints.
+  new AuthOAuthDiscoveryScenario()
 ];
 
 // All client scenarios
@@ -161,7 +170,8 @@ const allClientScenariosList: ClientScenario[] = [
   // Draft SEPs registered for CLI discoverability; pendingClientScenariosList
   // above excludes them from the default everything-server run.
   new FileInputsScenario(),
-  new ListTtlScenario()
+  new ListTtlScenario(),
+  new AuthOAuthDiscoveryScenario()
 ];
 
 // Active client scenarios (excludes pending)
