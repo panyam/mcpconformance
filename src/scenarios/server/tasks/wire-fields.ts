@@ -1,7 +1,7 @@
 /**
  * SEP-2663 Tasks Extension — wire-format / TTL conformance.
  *
- * Tests the renamed wire fields (ttlSeconds, pollIntervalMilliseconds),
+ * Tests the renamed wire fields (ttlMs, pollIntervalMs),
  * the no-early-TTL-expiry rule, and confirms the v1 `related-task` _meta
  * key is absent on tasks/get's inlined result (taskId is at root level
  * already, so the metadata is redundant).
@@ -37,18 +37,23 @@ export class TasksWireFieldsScenario implements ClientScenario {
 **Server Implementation Requirements:**
 
 **Wire-field renames (SEP-2663):**
-- The TTL field is named \`ttlSeconds\` on the wire (the v1 \`ttl\`
-  key is in milliseconds-by-convention; SEP-2663 puts the unit in the
-  field name).
-- The poll-interval field is named \`pollIntervalMilliseconds\` (v1
-  used \`pollInterval\`).
+- The TTL field is named \`ttlMs\` on the wire (the v1 \`ttl\` key was
+  in milliseconds-by-convention; SEP-2663 puts the unit in the field
+  name and standardised on the \`Ms\` suffix in the 2026-05-07 spec
+  commit aligning all duration fields).
+- The poll-interval field is named \`pollIntervalMs\` (v1 used
+  \`pollInterval\`; an interim SEP-2663 draft used
+  \`pollIntervalMilliseconds\` before the 2026-05-07 \`Ms\`-suffix
+  alignment).
 - A \`CreateTaskResult\` MUST NOT carry the legacy \`ttl\` or
   \`pollInterval\` keys — clients keying off v1 names on a v2 server
-  would silently miss the TTL guidance.
+  would silently miss the TTL guidance. The interim
+  \`ttlSeconds\` / \`pollIntervalMilliseconds\` keys MUST also be
+  absent on a server tracking the post-2026-05-07 spec.
 
 **TTL non-expiry (SEP-2663):**
 - A task MUST remain accessible via \`tasks/get\` for the duration of
-  its \`ttlSeconds\`; a server MUST NOT expire it earlier.
+  its \`ttlMs\`; a server MUST NOT expire it earlier.
 
 **Inlined-result \`_meta\` (SEP-2663):**
 - The v1 \`io.modelcontextprotocol/related-task\` \`_meta\` key MUST NOT
@@ -86,13 +91,13 @@ export class TasksWireFieldsScenario implements ClientScenario {
       return checks;
     }
 
-    // Check 1: ttlSeconds + pollIntervalMilliseconds wire shape.
+    // Check 1: ttlMs + pollIntervalMs wire shape.
     let createdTaskId: string | undefined;
     {
       const id = 'tasks-wire-field-renames';
       const name = 'TasksWireFieldRenames';
       const description =
-        'CreateTaskResult uses ttlSeconds + pollIntervalMilliseconds; legacy ttl / pollInterval keys absent';
+        'CreateTaskResult uses ttlMs + pollIntervalMs; legacy ttl / pollInterval keys absent and the interim ttlSeconds / pollIntervalMilliseconds keys also absent';
       try {
         const result = (await client.request(
           {
@@ -106,40 +111,52 @@ export class TasksWireFieldsScenario implements ClientScenario {
         )) as any;
         createdTaskId = result.taskId;
         const errs: string[] = [];
-        // ttlSeconds — required, positive (or null = unlimited; treat
-        // either as well-formed). Legacy `ttl` MUST be absent.
-        if (!('ttlSeconds' in result)) {
+        // ttlMs — required, positive integer (or null = unlimited; treat
+        // either as well-formed). Legacy `ttl` MUST be absent. Interim
+        // `ttlSeconds` MUST also be absent on a post-2026-05-07 server.
+        if (!('ttlMs' in result)) {
           errs.push(
-            'CreateTaskResult MUST carry ttlSeconds (renamed from v1 `ttl`)'
+            'CreateTaskResult MUST carry ttlMs (renamed from v1 `ttl` and from the interim `ttlSeconds`)'
           );
         } else if (
-          result.ttlSeconds !== null &&
-          (typeof result.ttlSeconds !== 'number' || result.ttlSeconds <= 0)
+          result.ttlMs !== null &&
+          (typeof result.ttlMs !== 'number' || result.ttlMs <= 0)
         ) {
           errs.push(
-            `ttlSeconds MUST be null or a positive number; got ${JSON.stringify(result.ttlSeconds)}`
+            `ttlMs MUST be null or a positive number (integer milliseconds); got ${JSON.stringify(result.ttlMs)}`
           );
         }
         if ('ttl' in result) {
           errs.push(
-            'CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlSeconds)'
+            'CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlMs)'
           );
         }
-        // pollIntervalMilliseconds — optional. When present it MUST be
-        // a positive number and the legacy `pollInterval` key MUST NOT
-        // appear.
+        if ('ttlSeconds' in result) {
+          errs.push(
+            'CreateTaskResult MUST NOT carry the interim `ttlSeconds` key (the 2026-05-07 SEP-2663 commit replaced it with ttlMs)'
+          );
+        }
+        // pollIntervalMs — optional. When present it MUST be a positive
+        // integer (milliseconds), and the legacy `pollInterval` key MUST
+        // NOT appear. The interim `pollIntervalMilliseconds` key MUST
+        // also be absent on a post-2026-05-07 server.
         if (
-          result.pollIntervalMilliseconds !== undefined &&
-          (typeof result.pollIntervalMilliseconds !== 'number' ||
-            result.pollIntervalMilliseconds <= 0)
+          result.pollIntervalMs !== undefined &&
+          (typeof result.pollIntervalMs !== 'number' ||
+            result.pollIntervalMs <= 0)
         ) {
           errs.push(
-            `pollIntervalMilliseconds MUST be a positive number when present; got ${JSON.stringify(result.pollIntervalMilliseconds)}`
+            `pollIntervalMs MUST be a positive number when present; got ${JSON.stringify(result.pollIntervalMs)}`
           );
         }
         if ('pollInterval' in result) {
           errs.push(
-            'CreateTaskResult MUST NOT carry the v1 `pollInterval` key (use pollIntervalMilliseconds)'
+            'CreateTaskResult MUST NOT carry the v1 `pollInterval` key (use pollIntervalMs)'
+          );
+        }
+        if ('pollIntervalMilliseconds' in result) {
+          errs.push(
+            'CreateTaskResult MUST NOT carry the interim `pollIntervalMilliseconds` key (the 2026-05-07 SEP-2663 commit replaced it with pollIntervalMs)'
           );
         }
         checks.push({
@@ -151,10 +168,13 @@ export class TasksWireFieldsScenario implements ClientScenario {
           errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
           specReferences: [SEP_2663_REF],
           details: {
-            ttlSeconds: result.ttlSeconds,
-            pollIntervalMilliseconds: result.pollIntervalMilliseconds,
+            ttlMs: result.ttlMs,
+            pollIntervalMs: result.pollIntervalMs,
             hasLegacyTtl: 'ttl' in result,
-            hasLegacyPollInterval: 'pollInterval' in result
+            hasLegacyPollInterval: 'pollInterval' in result,
+            hasInterimTtlSeconds: 'ttlSeconds' in result,
+            hasInterimPollIntervalMilliseconds:
+              'pollIntervalMilliseconds' in result
           }
         });
       } catch (error) {
@@ -167,14 +187,15 @@ export class TasksWireFieldsScenario implements ClientScenario {
       const id = 'tasks-no-early-ttl-expiry';
       const name = 'TasksNoEarlyTtlExpiry';
       const description =
-        'Task remains accessible via tasks/get for the duration of its ttlSeconds';
+        'Task remains accessible via tasks/get for the duration of its ttlMs';
       if (!createdTaskId) {
         checks.push(skipCheck(id, name, description, 'no task created'));
       } else {
         try {
           await waitForTerminal(client, createdTaskId);
-          // Sanity probe well before TTL (the unit is seconds; servers
-          // typically pick order-of-minutes defaults).
+          // Sanity probe well before TTL elapses. ttlMs is integer
+          // milliseconds and servers typically pick order-of-minutes
+          // defaults, so a 500ms wait is comfortably inside any sane TTL.
           await new Promise((r) => setTimeout(r, 500));
           const after = (await client.request(
             {

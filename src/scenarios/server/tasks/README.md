@@ -16,7 +16,7 @@ aren't stripped.
 
 | SEP      | What it adds                                                                                                                                                                                                                                                                                                          | Where it shows up                   |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests/requestState), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlSeconds`, `pollIntervalMilliseconds`) | every scenario                      |
+| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests/requestState), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds per the 2026-05-07 spec commit aligning duration suffixes) | every scenario                      |
 | SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                      | request-state, mrtr-input, dispatch |
 | SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                                | capability                          |
 | SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                   | headers                             |
@@ -56,8 +56,8 @@ vs protocol errors, cancellation semantics.
 
 | Check                                          | What it tests                                                                                |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `tasks-wire-field-renames`                     | `ttlSeconds` + `pollIntervalMilliseconds` present; legacy `ttl` / `pollInterval` keys absent |
-| `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlSeconds`                 |
+| `tasks-wire-field-renames`                     | `ttlMs` + `pollIntervalMs` present; legacy `ttl` / `pollInterval` and interim `ttlSeconds` / `pollIntervalMilliseconds` keys absent |
+| `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                      |
 | `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result` |
 
 ### `tasks-request-state` (`request-state.ts`)
@@ -166,14 +166,14 @@ server fails loudly rather than appearing well-formed. Today:
 | Client opt-in              | (none)                         | MUST declare extension at session OR per-request (SEP-2575)                                    |
 | Task creation              | Client sends `task` hint param | Server decides unilaterally                                                                    |
 | `resultType` discriminator | absent                         | `"task"` (CreateTaskResult) / `"complete"` (everything else) / `"incomplete"` (MRTR ephemeral) |
-| `CreateTaskResult` shape   | `{task: {...}}` (nested)       | flat: `{resultType, taskId, status, ttlSeconds, ...}` (no nested wrapper)                      |
+| `CreateTaskResult` shape   | `{task: {...}}` (nested)       | flat: `{resultType, taskId, status, ttlMs, ...}` (no nested wrapper)                           |
 | `tasks/get` response       | flat `TaskInfo` only           | `DetailedTask` with inlined `result`/`error`/`inputRequests`/`requestState`                    |
 | `tasks/update`             | n/a                            | new — MRTR resume path, returns `{resultType:"complete"}` ack                                  |
 | `tasks/cancel` response    | rich task envelope             | `{resultType:"complete"}` ack (no task state)                                                  |
 | `tasks/result`             | separate blocking method       | **removed** (result inlined on `tasks/get`)                                                    |
 | `tasks/list`               | session-scoped list            | **removed**                                                                                    |
-| TTL field                  | `ttl` (ms by convention)       | `ttlSeconds` (units in name)                                                                   |
-| Poll-interval field        | `pollInterval`                 | `pollIntervalMilliseconds`                                                                     |
+| TTL field                  | `ttl` (ms by convention)       | `ttlMs` (integer milliseconds, units in name)                                                  |
+| Poll-interval field        | `pollInterval`                 | `pollIntervalMs` (integer milliseconds)                                                        |
 | `parentTaskId`             | present                        | removed                                                                                        |
 | Tool errors                | `status:failed`                | `status:completed, result.isError:true`                                                        |
 | Mcp-Name HTTP header       | not set                        | request-side routing header (SEP-2243)                                                         |

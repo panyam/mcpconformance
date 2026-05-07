@@ -58,7 +58,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
   the client MUST NOT need to opt in via a request param.
 - The response MUST be a \`CreateTaskResult\` — a flat \`Result & Task\`
   intersection: \`resultType:"task"\`, plus \`taskId\` / \`status\` /
-  \`createdAt\` / \`lastUpdatedAt\` / \`ttlSeconds\` at the top level.
+  \`createdAt\` / \`lastUpdatedAt\` / \`ttlMs\` at the top level.
   There MUST NOT be a nested \`task\` wrapper key.
 
 **tasks/get DetailedTask:**
