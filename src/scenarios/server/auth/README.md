@@ -42,11 +42,11 @@ The tampered-token check derives a forged JWT from `AUTH_VALID_TOKEN` by flippin
 
 3 internal `ConformanceCheck` records covering RFC 7519 standard claim validation. Each test sends a properly-signed JWT (so the JWKS signature check passes) whose claims violate one specific RFC 7519 requirement.
 
-| Check                                        | What it tests                                                                                                                              |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `auth-jwt-claims-expired-rejected`           | Properly signed token with `exp` in the past → HTTP 401 (RFC 7519 §4.1.4). INFO when `AUTH_EXPIRED_TOKEN` env unset                        |
-| `auth-jwt-claims-wrong-audience-rejected`    | Properly signed token with `aud` ≠ resource URI → HTTP 401 (RFC 7519 §4.1.3). INFO when `AUTH_WRONG_AUDIENCE_TOKEN` env unset              |
-| `auth-jwt-claims-wrong-issuer-rejected`      | Token signed by trusted AS but with `iss` claim claiming a different issuer → HTTP 401 (RFC 7519 §4.1.1). INFO when `AUTH_WRONG_ISSUER_TOKEN` env unset |
+| Check                                     | What it tests                                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-jwt-claims-expired-rejected`        | Properly signed token with `exp` in the past → HTTP 401 (RFC 7519 §4.1.4). INFO when `AUTH_EXPIRED_TOKEN` env unset                                     |
+| `auth-jwt-claims-wrong-audience-rejected` | Properly signed token with `aud` ≠ resource URI → HTTP 401 (RFC 7519 §4.1.3). INFO when `AUTH_WRONG_AUDIENCE_TOKEN` env unset                           |
+| `auth-jwt-claims-wrong-issuer-rejected`   | Token signed by trusted AS but with `iss` claim claiming a different issuer → HTTP 401 (RFC 7519 §4.1.1). INFO when `AUTH_WRONG_ISSUER_TOKEN` env unset |
 
 Each token shape is a deliberate single-claim violation — the signature is valid (signed by the trusted AS), so each test isolates one claim-validation behavior. The fixture is responsible for minting these tokens (e.g., a `MintExpiredToken` / `MintWrongAudienceToken` / `MintWrongIssuerToken` helper that overrides RFC 7519 defaults via `MintTokenWithClaims`-style API).
 

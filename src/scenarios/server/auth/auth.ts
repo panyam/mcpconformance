@@ -907,8 +907,7 @@ appropriate env var before invoking the scenario.`;
           description: tc.description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [MCP_AUTH_REF]
         });
       }
