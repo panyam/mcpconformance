@@ -575,8 +575,7 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
           description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_6750_REF, MCP_AUTH_REF]
         });
       }
@@ -620,7 +619,12 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
         id,
         name,
         description,
-        status: errs.length === 0 ? (warnings.length === 0 ? 'SUCCESS' : 'WARNING') : 'FAILURE',
+        status:
+          errs.length === 0
+            ? warnings.length === 0
+              ? 'SUCCESS'
+              : 'WARNING'
+            : 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage:
           errs.length > 0
@@ -648,9 +652,7 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
         );
         const errs: string[] = [];
         if (r.status !== 401) {
-          errs.push(
-            `status MUST be 401 for a garbage token; got ${r.status}`
-          );
+          errs.push(`status MUST be 401 for a garbage token; got ${r.status}`);
         }
         checks.push({
           id,
@@ -669,8 +671,7 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
           description,
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
-          errorMessage:
-            error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
           specReferences: [RFC_6750_REF, MCP_AUTH_REF]
         });
       }

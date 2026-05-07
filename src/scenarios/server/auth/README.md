@@ -43,10 +43,10 @@ The fixture server MUST expose:
 
 | Endpoint                                                                                | Required by                        | Shape                                                     |
 | --------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| `/.well-known/oauth-protected-resource`                                                 | RFC 9728 + MCP 2025-11-25          | `{ resource, authorization_servers, ... }`                                          |
-| `/.well-known/oauth-protected-resource{mcpPath}`                                        | RFC 9728 §3.1 (when mcpPath ≠ `/`) | same shape                                                                          |
-| `/.well-known/oauth-authorization-server` (or off-origin equivalent advertised via PRM) | RFC 8414                           | `{ issuer, authorization_endpoint, token_endpoint, ... }`                           |
-| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 (`auth-jwt-validation`)    | requires Bearer auth but no specific scope                                          |
+| `/.well-known/oauth-protected-resource`                                                 | RFC 9728 + MCP 2025-11-25          | `{ resource, authorization_servers, ... }`                |
+| `/.well-known/oauth-protected-resource{mcpPath}`                                        | RFC 9728 §3.1 (when mcpPath ≠ `/`) | same shape                                                |
+| `/.well-known/oauth-authorization-server` (or off-origin equivalent advertised via PRM) | RFC 8414                           | `{ issuer, authorization_endpoint, token_endpoint, ... }` |
+| An auth-gated tool named `echo` accepting `{message: string}`                           | Phase 2 (`auth-jwt-validation`)    | requires Bearer auth but no specific scope                |
 
 Any-language fixture works. One example reference implementation lives at https://github.com/panyam/mcpkit/tree/main/examples/auth, which mounts these endpoints via `auth.MountAuth(...)`.
 
