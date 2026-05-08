@@ -1743,22 +1743,106 @@ the conformance suite grows a token-flow driver.`;
       }
     }
 
-    // Flow-layer check — pending token-flow driver.
+    // Flow-layer check — drives a real token-exchange POST when the
+    // test runner provides AUTH_SUBJECT_ASSERTION_TOKEN (a JWT signed
+    // by an upstream IdP the AS trusts) and AUTH_AS_TOKEN_ENDPOINT
+    // (the AS's token endpoint URL — typically off-origin from the
+    // resource server, so we can't infer it from `serverUrl`). When
+    // either is unset, emits SKIPPED with a clear "couldn't run"
+    // message rather than failing.
     {
       const id = 'auth-enterprise-managed-token-exchange-flow-shape';
       const name = 'AuthEnterpriseManagedTokenExchangeFlowShape';
       const description =
-        'Token endpoint MUST honor token-exchange (RFC 8693) and jwt-bearer (RFC 7523) grants and return access_token + token_type per the respective RFCs';
-      checks.push({
-        id,
-        name,
-        description,
-        status: 'SKIPPED',
-        timestamp: new Date().toISOString(),
-        errorMessage:
-          'Driving an end-to-end token-exchange flow requires a token-flow driver in the conformance test runner; not yet implemented. Will flip to SUCCESS / FAILURE when the driver lands. Tracked alongside mcpkit issue 381.',
-        specReferences: [RFC_8693_REF, RFC_7523_REF]
-      });
+        'Token endpoint MUST honor token-exchange (RFC 8693) — POST grant_type=urn:ietf:params:oauth:grant-type:token-exchange + subject_token + subject_token_type=jwt MUST return RFC 8693 §2.2 response shape: access_token + issued_token_type + token_type=Bearer + expires_in';
+      const subjectToken = process.env.AUTH_SUBJECT_ASSERTION_TOKEN ?? null;
+      const tokenEndpoint = process.env.AUTH_AS_TOKEN_ENDPOINT ?? null;
+      if (subjectToken === null || tokenEndpoint === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'SKIPPED',
+          timestamp: new Date().toISOString(),
+          errorMessage:
+            'AUTH_SUBJECT_ASSERTION_TOKEN and/or AUTH_AS_TOKEN_ENDPOINT unset; cannot drive the token-exchange flow. Set both to enable this check (the test runner is responsible for obtaining a signed assertion from a trusted upstream IdP that the AS accepts, and for resolving the AS token endpoint URL — typically from the AS metadata `token_endpoint` field).',
+          specReferences: [RFC_8693_REF, RFC_7523_REF]
+        });
+      } else {
+        try {
+          const form = new URLSearchParams();
+          form.set('grant_type', TOKEN_EXCHANGE_GRANT);
+          form.set('subject_token', subjectToken);
+          form.set('subject_token_type', 'urn:ietf:params:oauth:token-type:jwt');
+          const resp = await fetch(tokenEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form.toString()
+          });
+          const bodyText = await resp.text();
+          let body: any = null;
+          try {
+            body = JSON.parse(bodyText);
+          } catch {
+            /* leave null; checks below will catch malformed JSON */
+          }
+          const errs: string[] = [];
+          if (resp.status !== 200) {
+            errs.push(
+              `status MUST be 200; got ${resp.status} (body: ${bodyText.slice(0, 120)})`
+            );
+          }
+          if (body === null) {
+            errs.push(
+              `response MUST be valid JSON; got: ${bodyText.slice(0, 80)}`
+            );
+          } else {
+            // RFC 8693 §2.2 — REQUIRED fields on a token-exchange response.
+            if (typeof body.access_token !== 'string' || body.access_token === '') {
+              errs.push('response MUST carry `access_token` (non-empty string)');
+            }
+            if (typeof body.issued_token_type !== 'string' || body.issued_token_type === '') {
+              errs.push(
+                'response MUST carry `issued_token_type` per RFC 8693 §2.2 — REQUIRED on token-exchange responses'
+              );
+            }
+            if (typeof body.token_type !== 'string' || body.token_type === '') {
+              errs.push('response MUST carry `token_type`');
+            } else if (body.token_type.toLowerCase() !== 'bearer') {
+              errs.push(
+                `token_type SHOULD be "Bearer" for access_token issued_token_type; got "${body.token_type}"`
+              );
+            }
+            // expires_in is RECOMMENDED (RFC 8693 §2.2). Don't fail when
+            // absent, but warn so deployments notice.
+          }
+          checks.push({
+            id,
+            name,
+            description,
+            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+            specReferences: [RFC_8693_REF, RFC_7523_REF],
+            details: {
+              tokenEndpoint,
+              httpStatus: resp.status,
+              issuedTokenType: body?.issued_token_type
+            }
+          });
+        } catch (error) {
+          checks.push({
+            id,
+            name,
+            description,
+            status: 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+            specReferences: [RFC_8693_REF, RFC_7523_REF]
+          });
+        }
+      }
     }
 
     return checks;
