@@ -5,7 +5,7 @@ Multi Round-Trip Request flow on `tools/call` — the
 `InputRequiredResult` → retry-with-`inputResponses` → `ToolResult`
 contract that lets a tool gather elicitation / sampling / roots input
 without creating a task envelope. The variant was renamed from
-`InputRequiredResult` / `"incomplete"` in SEP-2322 commit `de6d76fb`
+`IncompleteResult` / `"incomplete"` in SEP-2322 commit `de6d76fb`
 (merged 2026-05-06).
 
 ## Specs covered
@@ -24,16 +24,16 @@ AGENTS.md "fewer scenarios, more checks" rule. A server that
 implemented elicitation round-trips but not sampling round-trips would
 be incoherent, so they bundle.
 
-| Check                                    | What it tests                                                                                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Check                                    | What it tests                                                                                                                      |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `mrtr-basic-elicitation-round-trip`      | Round 1 returns `InputRequiredResult` with `elicitation/create`; round 2 completes with the answer reflected                       |
-| `mrtr-sampling-round-trip`               | Same flow with `sampling/createMessage`                                                                                         |
-| `mrtr-roots-list-round-trip`             | Same flow with `roots/list`                                                                                                     |
-| `mrtr-request-state-round-trip`          | When server emits `requestState`, it's a non-empty string and the server validates the echo                                     |
+| `mrtr-sampling-round-trip`               | Same flow with `sampling/createMessage`                                                                                            |
+| `mrtr-roots-list-round-trip`             | Same flow with `roots/list`                                                                                                        |
+| `mrtr-request-state-round-trip`          | When server emits `requestState`, it's a non-empty string and the server validates the echo                                        |
 | `mrtr-multiple-input-requests-one-round` | A single `InputRequiredResult` MAY carry inputRequests for `elicitation/create` + `sampling/createMessage` + `roots/list` together |
-| `mrtr-multi-round-flow`                  | A handler MAY take 2+ rounds; each round mints a fresh `requestState`; final result reflects answers from every round           |
+| `mrtr-multi-round-flow`                  | A handler MAY take 2+ rounds; each round mints a fresh `requestState`; final result reflects answers from every round              |
 | `mrtr-wrong-input-key-rerequests`        | When client sends a wrong `inputResponses` key, server SHOULD re-request via `InputRequiredResult` rather than erroring            |
-| `mrtr-tasks-composition`                 | **SKIPPED** — see "Open issues" below                                                                                           |
+| `mrtr-tasks-composition`                 | **SKIPPED** — see "Open issues" below                                                                                              |
 
 ## Required server fixtures
 

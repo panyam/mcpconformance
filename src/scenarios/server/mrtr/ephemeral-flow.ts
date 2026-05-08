@@ -492,7 +492,9 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         if (!isInputRequiredResult(r2)) {
-          errs.push('round 2 MUST still be InputRequiredResult (asks for step2)');
+          errs.push(
+            'round 2 MUST still be InputRequiredResult (asks for step2)'
+          );
         }
         if (!r2.requestState) {
           errs.push('round 2 MUST mint a fresh requestState');
