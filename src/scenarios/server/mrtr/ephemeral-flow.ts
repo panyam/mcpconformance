@@ -606,7 +606,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
         id: 'mrtr-tasks-composition',
         name: 'MrtrTasksComposition',
         description:
-          'MRTR loop gathers input then final round returns CreateTaskResult (SEP-2663 451f5e1). Deferred on the reference-impl middleware refactor — the eager-task-creation pattern emits CreateTaskResult before the handler runs, so the handler\'s IsInputRequired signal can\'t be surfaced as InputRequiredResult on round 1. Tracked at panyam/mcpkit issue 347.',
+          "MRTR loop gathers input then final round returns CreateTaskResult (SEP-2663 451f5e1). Deferred on the reference-impl middleware refactor — the eager-task-creation pattern emits CreateTaskResult before the handler runs, so the handler's IsInputRequired signal can't be surfaced as InputRequiredResult on round 1. Tracked at panyam/mcpkit issue 347.",
         status: 'SKIPPED',
         timestamp: new Date().toISOString(),
         errorMessage:
