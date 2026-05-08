@@ -1773,7 +1773,10 @@ the conformance suite grows a token-flow driver.`;
           const form = new URLSearchParams();
           form.set('grant_type', TOKEN_EXCHANGE_GRANT);
           form.set('subject_token', subjectToken);
-          form.set('subject_token_type', 'urn:ietf:params:oauth:token-type:jwt');
+          form.set(
+            'subject_token_type',
+            'urn:ietf:params:oauth:token-type:jwt'
+          );
           const resp = await fetch(tokenEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1798,10 +1801,18 @@ the conformance suite grows a token-flow driver.`;
             );
           } else {
             // RFC 8693 §2.2 — REQUIRED fields on a token-exchange response.
-            if (typeof body.access_token !== 'string' || body.access_token === '') {
-              errs.push('response MUST carry `access_token` (non-empty string)');
+            if (
+              typeof body.access_token !== 'string' ||
+              body.access_token === ''
+            ) {
+              errs.push(
+                'response MUST carry `access_token` (non-empty string)'
+              );
             }
-            if (typeof body.issued_token_type !== 'string' || body.issued_token_type === '') {
+            if (
+              typeof body.issued_token_type !== 'string' ||
+              body.issued_token_type === ''
+            ) {
               errs.push(
                 'response MUST carry `issued_token_type` per RFC 8693 §2.2 — REQUIRED on token-exchange responses'
               );
