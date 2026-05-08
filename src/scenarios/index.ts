@@ -108,7 +108,7 @@ const pendingClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
 
-  // SEP-2322 MRTR (ephemeral IncompleteResult flow).
+  // SEP-2322 MRTR (ephemeral InputRequiredResult flow).
   // Targets a different fixture than tasks scenarios; the dedicated
   // mrtr/all-scenarios.test.ts runner points at an MRTR-conformant
   // server via MRTR_SERVER_URL / MRTR_SERVER_CMD.
@@ -186,7 +186,7 @@ const allClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
 
-  // SEP-2322 MRTR (ephemeral IncompleteResult flow). Targets a
+  // SEP-2322 MRTR (ephemeral InputRequiredResult flow). Targets a
   // dedicated MRTR fixture — out of scope for the default
   // everything-server until SEP-2322 lands there.
   new MrtrEphemeralFlowScenario()

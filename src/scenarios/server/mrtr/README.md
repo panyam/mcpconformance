@@ -2,9 +2,11 @@
 
 Tests any MCP server that implements the SEP-2322 ephemeral
 Multi Round-Trip Request flow on `tools/call` — the
-`IncompleteResult` → retry-with-`inputResponses` → `ToolResult`
+`InputRequiredResult` → retry-with-`inputResponses` → `ToolResult`
 contract that lets a tool gather elicitation / sampling / roots input
-without creating a task envelope.
+without creating a task envelope. The variant was renamed from
+`InputRequiredResult` / `"incomplete"` in SEP-2322 commit `de6d76fb`
+(merged 2026-05-06).
 
 ## Specs covered
 
@@ -24,13 +26,13 @@ be incoherent, so they bundle.
 
 | Check                                    | What it tests                                                                                                                   |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `mrtr-basic-elicitation-round-trip`      | Round 1 returns `IncompleteResult` with `elicitation/create`; round 2 completes with the answer reflected                       |
+| `mrtr-basic-elicitation-round-trip`      | Round 1 returns `InputRequiredResult` with `elicitation/create`; round 2 completes with the answer reflected                       |
 | `mrtr-sampling-round-trip`               | Same flow with `sampling/createMessage`                                                                                         |
 | `mrtr-roots-list-round-trip`             | Same flow with `roots/list`                                                                                                     |
 | `mrtr-request-state-round-trip`          | When server emits `requestState`, it's a non-empty string and the server validates the echo                                     |
-| `mrtr-multiple-input-requests-one-round` | A single `IncompleteResult` MAY carry inputRequests for `elicitation/create` + `sampling/createMessage` + `roots/list` together |
+| `mrtr-multiple-input-requests-one-round` | A single `InputRequiredResult` MAY carry inputRequests for `elicitation/create` + `sampling/createMessage` + `roots/list` together |
 | `mrtr-multi-round-flow`                  | A handler MAY take 2+ rounds; each round mints a fresh `requestState`; final result reflects answers from every round           |
-| `mrtr-wrong-input-key-rerequests`        | When client sends a wrong `inputResponses` key, server SHOULD re-request via `IncompleteResult` rather than erroring            |
+| `mrtr-wrong-input-key-rerequests`        | When client sends a wrong `inputResponses` key, server SHOULD re-request via `InputRequiredResult` rather than erroring            |
 | `mrtr-tasks-composition`                 | **SKIPPED** — see "Open issues" below                                                                                           |
 
 ## Required server fixtures
@@ -69,23 +71,24 @@ MRTR_SERVER_CMD="/path/to/mrtr-server --port 18093" \
 ### `mrtr-tasks-composition` deferred
 
 SEP-2663 commit `451f5e1` (Apr 30) made the MRTR → Tasks composition
-flow normative: a `tools/call` MAY exchange `IncompleteResult` rounds
+flow normative: a `tools/call` MAY exchange `InputRequiredResult` rounds
 to gather input, then return `CreateTaskResult` to go async on a
 subsequent round. Two blockers prevent enabling the check today:
 
-1. **Spec watch — discriminator value.** SEP-2322 (MRTR base) and
-   SEP-2663 (Tasks Extension) currently disagree on the wire value for
-   the "needs more input" discriminator: SEP-2322's draft uses
-   `"input_required"`, SEP-2663's draft uses `"incomplete"`. Awaiting
-   alignment between the SEP authors. The current literal lives in
-   `MRTR_INCOMPLETE_RESULT_TYPE` (helpers.ts) so it's a one-line flip
-   when the spec converges.
+1. **Spec watch — discriminator value.** SEP-2322 merged on 2026-05-06
+   with `"input_required"` (commit `de6d76fb` renamed the variant from
+   IncompleteResult / `"incomplete"` per dsp-ant request). SEP-2663's
+   PR head (82fb2c4d as of 2026-05-07 PM) still reads `"incomplete"`
+   on line 121 of the mdx — Caitie's 5/15 RC commitment (issue
+   comment 4384052694) tracks the alignment. The constant lives in
+   `MRTR_INPUT_REQUIRED_RESULT_TYPE` (helpers.ts) so it's a one-line
+   flip if SEP-2663's eventual alignment surprises us.
 
 2. **Reference-impl gap.** The natural server-side implementation
    pattern for tasks (mint task up-front, run handler in a goroutine /
-   async task) means the handler's `IncompleteResult` signal isn't
+   async task) means the handler's `InputRequiredResult` signal isn't
    visible to the middleware in time — by the time the handler returns
-   `IsIncomplete`, the `CreateTaskResult` is already on the wire. SDKs
+   `IsInputRequired`, the `CreateTaskResult` is already on the wire. SDKs
    in any language need an inverted middleware pattern that runs the
    first round synchronously and only spins up the task once the
    handler signals async-promotion.
@@ -101,8 +104,8 @@ the SKIPPED short-circuit in `ephemeral-flow.ts` Check 8.
 
 ### Why the MRTR scenarios share helpers with `tasks/`
 
-`MRTR_INCOMPLETE_RESULT_TYPE`, the result-type predicates
-(`isIncompleteResult`, `isCompleteResult`), and the elicitation/sampling/
+`MRTR_INPUT_REQUIRED_RESULT_TYPE`, the result-type predicates
+(`isInputRequiredResult`, `isCompleteResult`), and the elicitation/sampling/
 roots mocks live in `mrtr/helpers.ts`. The shared `AnyResult` Zod
 passthrough schema and `waitForTerminal`/`waitForStatus` polling helpers
 are imported from the sibling `../tasks/helpers` because both scenario

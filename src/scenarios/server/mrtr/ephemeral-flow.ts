@@ -1,9 +1,9 @@
 /**
- * SEP-2322 MRTR ephemeral IncompleteResult flow.
+ * SEP-2322 MRTR ephemeral InputRequiredResult flow.
  *
  * Tests the multi-round-trip-request contract end-to-end against any
  * server that implements SEP-2322's ephemeral path: tools/call returns
- * `IncompleteResult` to gather input, the client retries the SAME
+ * `InputRequiredResult` to gather input, the client retries the SAME
  * tools/call with `inputResponses` (and echoed `requestState`), and
  * the server eventually returns a normal `ToolResult`. No task
  * envelope, no separate methods.
@@ -30,12 +30,12 @@ import {
 } from '../../../types';
 import { AnyResult } from '../tasks/helpers';
 import {
-  MRTR_INCOMPLETE_RESULT_TYPE,
+  MRTR_INPUT_REQUIRED_RESULT_TYPE,
   SEP_2322_REF,
   errMsg,
   failureCheck,
   isCompleteResult,
-  isIncompleteResult,
+  isInputRequiredResult,
   mockElicitResponse,
   mockListRootsResponse,
   mockSamplingResponse
@@ -52,7 +52,7 @@ export class MrtrEphemeralFlowScenario implements ClientScenario {
 **Server Implementation Requirements:**
 
 Every \`tools/call\` response in the MRTR contract is one of:
-- \`resultType:"${MRTR_INCOMPLETE_RESULT_TYPE}"\` — server is asking for
+- \`resultType:"${MRTR_INPUT_REQUIRED_RESULT_TYPE}"\` — server is asking for
   more input; carries an \`inputRequests\` map keyed by server-minted
   opaque ids and (optionally) a \`requestState\` token to echo on the
   next round.
@@ -61,7 +61,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
   the body is a normal \`ToolResult\` with \`content[]\`.
 
 **Round-trip rules (SEP-2322):**
-- Round 1 with no \`inputResponses\` MUST return \`IncompleteResult\`
+- Round 1 with no \`inputResponses\` MUST return \`InputRequiredResult\`
   with \`inputRequests\`.
 - The client retries the SAME tools/call (same name + arguments) with
   \`inputResponses\` keyed against the previously-emitted ids, plus the
@@ -70,7 +70,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
   the next round.
 
 **Multi-method support:**
-- A single \`IncompleteResult\` can carry \`inputRequests\` for
+- A single \`InputRequiredResult\` can carry \`inputRequests\` for
   \`elicitation/create\`, \`sampling/createMessage\`, and \`roots/list\`
   in any combination.
 
@@ -82,7 +82,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
 
 **Wrong-key tolerance:**
 - When a client retries with an \`inputResponses\` key the server did
-  not emit, the server SHOULD re-request via \`IncompleteResult\`
+  not emit, the server SHOULD re-request via \`InputRequiredResult\`
   rather than erroring. (The spec is soft here; this scenario asserts
   the re-request path.)`;
 
@@ -123,7 +123,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
       const id = 'mrtr-basic-elicitation-round-trip';
       const name = 'MrtrBasicElicitationRoundTrip';
       const description =
-        'tools/call returns IncompleteResult on round 1 (elicitation/create); completes on round 2 with the answer reflected in the result';
+        'tools/call returns InputRequiredResult on round 1 (elicitation/create); completes on round 2 with the answer reflected in the result';
       try {
         const r1 = (await client.request(
           {
@@ -133,19 +133,19 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
+        if (!isInputRequiredResult(r1)) {
           errs.push(
-            `round 1 MUST be IncompleteResult; got ${JSON.stringify(r1)}`
+            `round 1 MUST be InputRequiredResult; got ${JSON.stringify(r1)}`
           );
         }
-        if (r1.resultType !== MRTR_INCOMPLETE_RESULT_TYPE) {
+        if (r1.resultType !== MRTR_INPUT_REQUIRED_RESULT_TYPE) {
           errs.push(
-            `resultType MUST be "${MRTR_INCOMPLETE_RESULT_TYPE}"; got ${JSON.stringify(r1.resultType)}`
+            `resultType MUST be "${MRTR_INPUT_REQUIRED_RESULT_TYPE}"; got ${JSON.stringify(r1.resultType)}`
           );
         }
         if (!r1.inputRequests || !r1.inputRequests.user_name) {
           errs.push(
-            'IncompleteResult MUST carry inputRequests with the "user_name" key'
+            'InputRequiredResult MUST carry inputRequests with the "user_name" key'
           );
         } else if (r1.inputRequests.user_name.method !== 'elicitation/create') {
           errs.push(
@@ -197,7 +197,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
       const id = 'mrtr-sampling-round-trip';
       const name = 'MrtrSamplingRoundTrip';
       const description =
-        'IncompleteResult with sampling/createMessage round-trips through the inputResponses retry';
+        'InputRequiredResult with sampling/createMessage round-trips through the inputResponses retry';
       try {
         const r1 = (await client.request(
           {
@@ -207,8 +207,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
-          errs.push('round 1 MUST be IncompleteResult');
+        if (!isInputRequiredResult(r1)) {
+          errs.push('round 1 MUST be InputRequiredResult');
         } else {
           const key = Object.keys(r1.inputRequests)[0];
           if (r1.inputRequests[key].method !== 'sampling/createMessage') {
@@ -253,7 +253,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
       const id = 'mrtr-roots-list-round-trip';
       const name = 'MrtrRootsListRoundTrip';
       const description =
-        'IncompleteResult with roots/list round-trips through the inputResponses retry';
+        'InputRequiredResult with roots/list round-trips through the inputResponses retry';
       try {
         const r1 = (await client.request(
           {
@@ -263,8 +263,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
-          errs.push('round 1 MUST be IncompleteResult');
+        if (!isInputRequiredResult(r1)) {
+          errs.push('round 1 MUST be InputRequiredResult');
         } else {
           const key = Object.keys(r1.inputRequests)[0];
           if (r1.inputRequests[key].method !== 'roots/list') {
@@ -322,8 +322,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
-          errs.push('round 1 MUST be IncompleteResult');
+        if (!isInputRequiredResult(r1)) {
+          errs.push('round 1 MUST be InputRequiredResult');
         }
         if (typeof r1.requestState !== 'string') {
           errs.push(
@@ -378,7 +378,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
       const id = 'mrtr-multiple-input-requests-one-round';
       const name = 'MrtrMultipleInputRequestsOneRound';
       const description =
-        'A single IncompleteResult MAY carry inputRequests for elicitation/create + sampling/createMessage + roots/list together';
+        'A single InputRequiredResult MAY carry inputRequests for elicitation/create + sampling/createMessage + roots/list together';
       try {
         const r1 = (await client.request(
           {
@@ -391,8 +391,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
-          errs.push('round 1 MUST be IncompleteResult');
+        if (!isInputRequiredResult(r1)) {
+          errs.push('round 1 MUST be InputRequiredResult');
         } else {
           const keys = Object.keys(r1.inputRequests);
           if (keys.length < 3) {
@@ -471,8 +471,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
-          errs.push('round 1 MUST be IncompleteResult');
+        if (!isInputRequiredResult(r1)) {
+          errs.push('round 1 MUST be InputRequiredResult');
         }
         if (!r1.requestState) {
           errs.push('round 1 MUST mint requestState for multi-round flow');
@@ -491,8 +491,8 @@ Every \`tools/call\` response in the MRTR contract is one of:
           },
           AnyResult
         )) as any;
-        if (!isIncompleteResult(r2)) {
-          errs.push('round 2 MUST still be IncompleteResult (asks for step2)');
+        if (!isInputRequiredResult(r2)) {
+          errs.push('round 2 MUST still be InputRequiredResult (asks for step2)');
         }
         if (!r2.requestState) {
           errs.push('round 2 MUST mint a fresh requestState');
@@ -547,7 +547,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
       const id = 'mrtr-wrong-input-key-rerequests';
       const name = 'MrtrWrongInputKeyRerequests';
       const description =
-        'When the client sends inputResponses with a key the server did not emit, the server SHOULD re-request via IncompleteResult';
+        'When the client sends inputResponses with a key the server did not emit, the server SHOULD re-request via InputRequiredResult';
       try {
         const r1 = (await client.request(
           {
@@ -563,9 +563,9 @@ Every \`tools/call\` response in the MRTR contract is one of:
           AnyResult
         )) as any;
         const errs: string[] = [];
-        if (!isIncompleteResult(r1)) {
+        if (!isInputRequiredResult(r1)) {
           errs.push(
-            `expected IncompleteResult re-request when inputResponses key is wrong; got ${JSON.stringify(r1)}`
+            `expected InputRequiredResult re-request when inputResponses key is wrong; got ${JSON.stringify(r1)}`
           );
         }
         checks.push({
@@ -588,7 +588,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
     //   (a) Spec watch on the MRTR resultType discriminator value
     //       (input_required vs incomplete; see helpers.ts SPEC WATCH).
     //   (b) Reference servers need middleware that observes the
-    //       handler's IncompleteResult signal BEFORE creating a task —
+    //       handler's InputRequiredResult signal BEFORE creating a task —
     //       the natural implementation pattern (create task up-front,
     //       run handler in goroutine) doesn't expose the signal in time.
     //       Tracked in https://github.com/panyam/mcpkit/issues/347 as
