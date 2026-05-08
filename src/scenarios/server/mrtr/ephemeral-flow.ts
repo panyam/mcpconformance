@@ -587,8 +587,12 @@ Every \`tools/call\` response in the MRTR contract is one of:
     // Check 8: SKIPPED — MRTR → Tasks composition.
     // Tracking placeholder; spec made this normative in commit 451f5e1
     // (Apr 30) but two blockers remain before this can be enabled:
-    //   (a) Spec watch on the MRTR resultType discriminator value
-    //       (input_required vs incomplete; see helpers.ts SPEC WATCH).
+    //   (a) Spec alignment on the MRTR resultType. SEP-2322 merged
+    //       2026-05-06 with "input_required" (commit de6d76fb).
+    //       SEP-2663's PR head still reads "incomplete" on line 121 of
+    //       the mdx — Caitie's 5/15 RC commitment (PR 2322 issue
+    //       comment 4384052694) tracks the alignment. Once SEP-2663
+    //       lands its alignment commit this blocker is resolved.
     //   (b) Reference servers need middleware that observes the
     //       handler's InputRequiredResult signal BEFORE creating a task —
     //       the natural implementation pattern (create task up-front,
@@ -601,11 +605,11 @@ Every \`tools/call\` response in the MRTR contract is one of:
         id: 'mrtr-tasks-composition',
         name: 'MrtrTasksComposition',
         description:
-          'MRTR loop gathers input then final round returns CreateTaskResult (SEP-2663 451f5e1; deferred — spec authors disagree on the resultType discriminator value, and reference implementations still in flight)',
+          'MRTR loop gathers input then final round returns CreateTaskResult (SEP-2663 451f5e1; deferred — SEP-2663 has not yet aligned its resultType literal with the merged SEP-2322 rename, and reference servers still need a middleware that surfaces the InputRequiredResult signal before task creation)',
         status: 'SKIPPED',
         timestamp: new Date().toISOString(),
         errorMessage:
-          "Skipped: deferred until (a) spec authors converge on the MRTR resultType value (input_required vs incomplete) and (b) reference servers can observe the handler's IsIncomplete signal before creating a task.",
+          "Skipped: deferred until (a) SEP-2663 aligns its resultType literal with the merged SEP-2322 'input_required' value (still 'incomplete' as of PR 2663 head 82fb2c4d, expected at the 5/15 RC) and (b) reference servers can observe the handler's IsInputRequired signal before creating a task (panyam/mcpkit issue 347).",
         specReferences: [
           SEP_2322_REF,
           {
