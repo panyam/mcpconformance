@@ -56,7 +56,7 @@ vs protocol errors, cancellation semantics.
 
 | Check                                          | What it tests                                                                                                                       |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `tasks-wire-field-renames`                     | `ttlMs` + `pollIntervalMs` present; legacy `ttl` / `pollInterval` and interim `ttlSeconds` / `pollIntervalMilliseconds` keys absent |
+| `tasks-wire-field-renames`                     | `ttlMs` + `pollIntervalMs` present and integer-valued; legacy `ttl` / `pollInterval` keys absent                                    |
 | `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                                                             |
 | `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result`                                        |
 

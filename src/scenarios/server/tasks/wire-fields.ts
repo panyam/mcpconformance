@@ -39,17 +39,14 @@ export class TasksWireFieldsScenario implements ClientScenario {
 **Wire-field renames (SEP-2663):**
 - The TTL field is named \`ttlMs\` on the wire (the v1 \`ttl\` key was
   in milliseconds-by-convention; SEP-2663 puts the unit in the field
-  name and standardised on the \`Ms\` suffix in the 2026-05-07 spec
-  commit aligning all duration fields).
+  name and standardised on the \`Ms\` suffix for all duration fields).
 - The poll-interval field is named \`pollIntervalMs\` (v1 used
-  \`pollInterval\`; an interim SEP-2663 draft used
-  \`pollIntervalMilliseconds\` before the 2026-05-07 \`Ms\`-suffix
-  alignment).
+  \`pollInterval\`).
 - A \`CreateTaskResult\` MUST NOT carry the legacy \`ttl\` or
   \`pollInterval\` keys — clients keying off v1 names on a v2 server
-  would silently miss the TTL guidance. The interim
-  \`ttlSeconds\` / \`pollIntervalMilliseconds\` keys MUST also be
-  absent on a server tracking the post-2026-05-07 spec.
+  would silently miss the TTL guidance.
+- Both \`ttlMs\` and \`pollIntervalMs\` are integer milliseconds.
+  Servers MUST NOT emit fractional values.
 
 **TTL non-expiry (SEP-2663):**
 - A task MUST remain accessible via \`tasks/get\` for the duration of
@@ -97,7 +94,7 @@ export class TasksWireFieldsScenario implements ClientScenario {
       const id = 'tasks-wire-field-renames';
       const name = 'TasksWireFieldRenames';
       const description =
-        'CreateTaskResult uses ttlMs + pollIntervalMs; legacy ttl / pollInterval keys absent and the interim ttlSeconds / pollIntervalMilliseconds keys also absent';
+        'CreateTaskResult uses ttlMs + pollIntervalMs (integer milliseconds); legacy ttl / pollInterval keys absent';
       try {
         const result = (await client.request(
           {
@@ -111,19 +108,21 @@ export class TasksWireFieldsScenario implements ClientScenario {
         )) as any;
         createdTaskId = result.taskId;
         const errs: string[] = [];
-        // ttlMs — required, positive integer (or null = unlimited; treat
-        // either as well-formed). Legacy `ttl` MUST be absent. Interim
-        // `ttlSeconds` MUST also be absent on a post-2026-05-07 server.
+        // ttlMs — required, positive integer milliseconds (or null =
+        // unlimited; treat either as well-formed). Legacy `ttl` MUST
+        // be absent.
         if (!('ttlMs' in result)) {
           errs.push(
-            'CreateTaskResult MUST carry ttlMs (renamed from v1 `ttl` and from the interim `ttlSeconds`)'
+            'CreateTaskResult MUST carry ttlMs (renamed from v1 `ttl`)'
           );
         } else if (
           result.ttlMs !== null &&
-          (typeof result.ttlMs !== 'number' || result.ttlMs <= 0)
+          (typeof result.ttlMs !== 'number' ||
+            !Number.isInteger(result.ttlMs) ||
+            result.ttlMs <= 0)
         ) {
           errs.push(
-            `ttlMs MUST be null or a positive number (integer milliseconds); got ${JSON.stringify(result.ttlMs)}`
+            `ttlMs MUST be null or a positive integer (milliseconds); got ${JSON.stringify(result.ttlMs)}`
           );
         }
         if ('ttl' in result) {
@@ -131,32 +130,22 @@ export class TasksWireFieldsScenario implements ClientScenario {
             'CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlMs)'
           );
         }
-        if ('ttlSeconds' in result) {
-          errs.push(
-            'CreateTaskResult MUST NOT carry the interim `ttlSeconds` key (the 2026-05-07 SEP-2663 commit replaced it with ttlMs)'
-          );
-        }
         // pollIntervalMs — optional. When present it MUST be a positive
         // integer (milliseconds), and the legacy `pollInterval` key MUST
-        // NOT appear. The interim `pollIntervalMilliseconds` key MUST
-        // also be absent on a post-2026-05-07 server.
+        // NOT appear.
         if (
           result.pollIntervalMs !== undefined &&
           (typeof result.pollIntervalMs !== 'number' ||
+            !Number.isInteger(result.pollIntervalMs) ||
             result.pollIntervalMs <= 0)
         ) {
           errs.push(
-            `pollIntervalMs MUST be a positive number when present; got ${JSON.stringify(result.pollIntervalMs)}`
+            `pollIntervalMs MUST be a positive integer when present; got ${JSON.stringify(result.pollIntervalMs)}`
           );
         }
         if ('pollInterval' in result) {
           errs.push(
             'CreateTaskResult MUST NOT carry the v1 `pollInterval` key (use pollIntervalMs)'
-          );
-        }
-        if ('pollIntervalMilliseconds' in result) {
-          errs.push(
-            'CreateTaskResult MUST NOT carry the interim `pollIntervalMilliseconds` key (the 2026-05-07 SEP-2663 commit replaced it with pollIntervalMs)'
           );
         }
         checks.push({
@@ -171,10 +160,7 @@ export class TasksWireFieldsScenario implements ClientScenario {
             ttlMs: result.ttlMs,
             pollIntervalMs: result.pollIntervalMs,
             hasLegacyTtl: 'ttl' in result,
-            hasLegacyPollInterval: 'pollInterval' in result,
-            hasInterimTtlSeconds: 'ttlSeconds' in result,
-            hasInterimPollIntervalMilliseconds:
-              'pollIntervalMilliseconds' in result
+            hasLegacyPollInterval: 'pollInterval' in result
           }
         });
       } catch (error) {
