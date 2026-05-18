@@ -1,16 +1,24 @@
 /**
- * SEP-2322 / SEP-2663 — requestState conformance.
+ * SEP-2663 Tasks Extension — `requestState` removal conformance.
  *
- * Tests the optional opaque session-continuation token:
- *   - Server MAY include requestState on tasks/get responses.
- *   - Clients MUST echo it back on subsequent tasks/get / tasks/update /
- *     tasks/cancel for the same task — server MUST accept the echo.
- *   - Servers MUST tolerate a stale but still-valid token (one minted
- *     before a newer one but still within its TTL window).
+ * The pre-merge SEP-2663 defined a "Request State Management" section
+ * that let servers attach an opaque `requestState` token to task-bearing
+ * messages (CreateTaskResult, tasks/get, notifications/tasks). The
+ * merged Final SEP-2663 removes the field from the `Task` base
+ * interface and deletes that entire section, so the tasks-v2 wire
+ * carries no `requestState`.
  *
- * If the server does not issue requestState at all (it's optional per
- * SEP-2322), the dependent checks emit INFO rather than failing — the
- * spec allows omission.
+ * This scenario asserts the absence:
+ *   - CreateTaskResult MUST NOT carry `requestState`.
+ *   - DetailedTask (tasks/get response) MUST NOT carry `requestState`,
+ *     regardless of status.
+ *
+ * The notifications/tasks payload absence-assert lives in
+ * notifications.ts so the SSE-observation harness is not duplicated.
+ *
+ * SEP-2322's InputRequiredResult still carries `requestState` — that is
+ * the MRTR multi-round-trip surface, not the tasks-v2 wire, and is
+ * tested separately in mrtr-input.ts.
  *
  * Required server fixtures:
  *   - slow_compute  — task-supporting, sleeps N seconds
@@ -27,36 +35,33 @@ import {
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
-  SEP_2322_REF,
   SEP_2663_REF,
   AnyResult,
   errMsg,
   failureCheck
 } from './helpers';
 
-export class TasksRequestStateScenario implements ClientScenario {
-  name = 'tasks-request-state';
+export class TasksRequestStateRemovalScenario implements ClientScenario {
+  name = 'tasks-request-state-removal';
   specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
-  description = `Test SEP-2322 requestState semantics on the tasks surface.
+  description = `Verify the post-merge removal of \`requestState\` from the tasks-v2 wire.
 
 **Server Implementation Requirements:**
 
-**Optional emission (SEP-2322):**
-- A server MAY include a non-empty string \`requestState\` on tasks/get
-  responses to allow stateless deployments to resume the conversation.
-  When present, it MUST be a non-empty string.
+The merged SEP-2663 dropped the \`requestState?: string\` field from
+the \`Task\` base interface and removed the entire "Request State
+Management" section. The Final spec does not define \`requestState\` on
+any tasks-v2 wire shape.
 
-**Echo acceptance:**
-- A client that receives a \`requestState\` from tasks/get MUST be able
-  to echo it back on a subsequent \`tasks/get\`/\`tasks/update\`/
-  \`tasks/cancel\` for the same task. The server MUST accept the echo.
+- \`CreateTaskResult\` MUST NOT carry \`requestState\` on the
+  \`tools/call\` response that creates a task.
+- The \`tasks/get\` response (DetailedTask) MUST NOT carry
+  \`requestState\` for any status (\`working\` / \`input_required\` /
+  \`completed\` / \`cancelled\` / \`failed\`).
 
-**Stale-but-valid tolerance (SEP-2663):**
-- Each tasks/get may mint a new requestState (e.g., for a refreshed
-  TTL). After a fresh tasks/get returns a newer token, echoing the
-  earlier one MUST still succeed as long as the earlier token has not
-  itself expired. (Servers MUST tolerate stale-but-valid tokens
-  gracefully.)`;
+SEP-2322's \`InputRequiredResult\` still carries \`requestState\` on the
+MRTR (multi-round-trip) surface — that is unrelated to the tasks-v2
+wire and is exercised by mrtr-input.ts.`;
 
   async run(serverUrl: string): Promise<ConformanceCheck[]> {
     const checks: ConformanceCheck[] = [];
@@ -81,214 +86,112 @@ export class TasksRequestStateScenario implements ClientScenario {
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: `Failed to initialize: ${errMsg(error)}`,
-        specReferences: [SEP_2322_REF]
+        specReferences: [SEP_2663_REF]
       });
       return checks;
     }
 
-    // Drive a long-running task once and reuse it for every check.
+    // Drive a long-running task so we can interrogate `tasks/get` while
+    // the task is still in `working`. A terminal-only sample would miss
+    // any field a server populated only during the in-flight window.
     let taskId: string | undefined;
+    let createdTask: any;
     try {
-      const created = (await client.request(
+      createdTask = (await client.request(
         {
           method: 'tools/call',
           params: {
             name: 'slow_compute',
-            arguments: { seconds: 60, label: 'request-state' }
+            arguments: { seconds: 60, label: 'request-state-removal' }
           }
         },
         AnyResult
       )) as any;
-      taskId = created.taskId;
+      taskId = createdTask?.taskId;
     } catch (error) {
       checks.push(
         failureCheck(
-          'tasks-request-state-setup',
-          'TasksRequestStateSetup',
-          'Failed to create a long-running task to exercise requestState',
+          'tasks-request-state-removal-setup',
+          'TasksRequestStateRemovalSetup',
+          'Failed to create a long-running task to exercise the absence-asserts',
           error,
-          [SEP_2322_REF]
+          [SEP_2663_REF]
         )
       );
+      await client.close().catch(() => {});
       return checks;
     }
     if (!taskId) {
       checks.push({
-        id: 'tasks-request-state-setup',
-        name: 'TasksRequestStateSetup',
+        id: 'tasks-request-state-removal-setup',
+        name: 'TasksRequestStateRemovalSetup',
         description:
-          'slow_compute did not produce a task; cannot exercise requestState',
+          'slow_compute did not return a CreateTaskResult; cannot exercise absence-asserts',
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
-        errorMessage: 'no taskId in CreateTaskResult',
-        specReferences: [SEP_2322_REF]
+        errorMessage: 'no taskId in tools/call response',
+        specReferences: [SEP_2663_REF]
       });
+      await client.close().catch(() => {});
       return checks;
     }
 
-    let firstToken: string | undefined;
-
-    // Check 1: tasks/get response shape — requestState (optional) must
-    // be a non-empty string when present.
+    // Check 1: CreateTaskResult MUST NOT carry requestState.
     {
-      const id = 'tasks-request-state-shape';
-      const name = 'TasksRequestStateShape';
+      const id = 'tasks-create-result-no-request-state';
+      const name = 'TasksCreateResultNoRequestState';
       const description =
-        'tasks/get may include requestState; when present it MUST be a non-empty string';
+        'CreateTaskResult MUST NOT carry `requestState` (the merged SEP-2663 removed the field from the Task base interface)';
+      const has = Object.prototype.hasOwnProperty.call(
+        createdTask,
+        'requestState'
+      );
+      checks.push({
+        id,
+        name,
+        description,
+        status: has ? 'FAILURE' : 'SUCCESS',
+        timestamp: new Date().toISOString(),
+        errorMessage: has
+          ? `CreateTaskResult carries requestState = ${JSON.stringify(createdTask.requestState)}; the merged spec removed this field from the tasks-v2 wire.`
+          : undefined,
+        specReferences: [SEP_2663_REF]
+      });
+    }
+
+    // Check 2: tasks/get response (DetailedTask) MUST NOT carry requestState.
+    {
+      const id = 'tasks-get-detailed-no-request-state';
+      const name = 'TasksGetDetailedNoRequestState';
+      const description =
+        'tasks/get response (DetailedTask) MUST NOT carry `requestState` for any status (per the merged SEP-2663)';
       try {
-        const task = (await client.request(
+        const detailed = (await client.request(
           { method: 'tasks/get', params: { taskId } },
           AnyResult
         )) as any;
-        const errs: string[] = [];
-        if (task.requestState !== undefined) {
-          if (typeof task.requestState !== 'string') {
-            errs.push(
-              `requestState MUST be a string when present; got ${typeof task.requestState}`
-            );
-          } else if (task.requestState.length === 0) {
-            errs.push(
-              'requestState MUST be non-empty when present (omit the field instead of emitting "")'
-            );
-          } else {
-            firstToken = task.requestState;
-          }
-        }
-        // Optional emission: SUCCESS regardless of presence; INFO when
-        // server omits it so the result advertises the chosen path.
-        const status: 'SUCCESS' | 'INFO' | 'FAILURE' =
-          errs.length === 0 ? (firstToken ? 'SUCCESS' : 'INFO') : 'FAILURE';
+        const has = Object.prototype.hasOwnProperty.call(
+          detailed,
+          'requestState'
+        );
         checks.push({
           id,
           name,
           description,
-          status,
+          status: has ? 'FAILURE' : 'SUCCESS',
           timestamp: new Date().toISOString(),
-          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-          specReferences: [SEP_2322_REF],
-          details: {
-            emitted: Boolean(firstToken),
-            tokenLength: firstToken?.length
-          }
+          errorMessage: has
+            ? `DetailedTask carries requestState = ${JSON.stringify(detailed.requestState)} (status=${detailed.status}); the merged spec removed this field from the tasks-v2 wire.`
+            : undefined,
+          specReferences: [SEP_2663_REF],
+          details: { observedStatus: detailed.status }
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
+        checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
       }
     }
 
-    // Check 2: client echoes requestState; server accepts the echo.
-    {
-      const id = 'tasks-request-state-echo';
-      const name = 'TasksRequestStateEcho';
-      const description =
-        'Server accepts a tasks/get with the previously-emitted requestState echoed back';
-      if (!firstToken) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'INFO',
-          timestamp: new Date().toISOString(),
-          errorMessage: 'Server did not emit requestState; nothing to echo',
-          specReferences: [SEP_2322_REF]
-        });
-      } else {
-        try {
-          const echoed = (await client.request(
-            {
-              method: 'tasks/get',
-              params: { taskId, requestState: firstToken }
-            },
-            AnyResult
-          )) as any;
-          const errs: string[] = [];
-          if (echoed.taskId !== taskId) {
-            errs.push(
-              `tasks/get with echoed requestState MUST resolve the same taskId; got ${echoed.taskId}`
-            );
-          }
-          checks.push({
-            id,
-            name,
-            description,
-            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-            specReferences: [SEP_2322_REF]
-          });
-        } catch (error) {
-          checks.push(
-            failureCheck(id, name, description, error, [SEP_2322_REF])
-          );
-        }
-      }
-    }
-
-    // Check 3: stale-but-valid tolerance.
-    {
-      const id = 'tasks-request-state-stale-tolerance';
-      const name = 'TasksRequestStateStaleTolerance';
-      const description =
-        'After a newer requestState is minted, the earlier (stale-but-still-valid) token MUST still be accepted';
-      if (!firstToken) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'INFO',
-          timestamp: new Date().toISOString(),
-          errorMessage:
-            'Server did not emit requestState; stale tolerance is moot',
-          specReferences: [SEP_2663_REF, SEP_2322_REF]
-        });
-      } else {
-        try {
-          // Force a fresh mint by issuing another tasks/get. On servers
-          // that sign tokens with embedded expiry, this likely yields a
-          // newer token; on plaintext-token servers it round-trips the
-          // same value (still valid).
-          await client.request(
-            {
-              method: 'tasks/get',
-              params: { taskId, requestState: firstToken }
-            },
-            AnyResult
-          );
-          // Now re-echo the OLDER token; server MUST accept.
-          const stale = (await client.request(
-            {
-              method: 'tasks/get',
-              params: { taskId, requestState: firstToken }
-            },
-            AnyResult
-          )) as any;
-          const errs: string[] = [];
-          if (stale.taskId !== taskId) {
-            errs.push(
-              `stale-but-valid requestState MUST resolve the same taskId; got ${stale.taskId}`
-            );
-          }
-          checks.push({
-            id,
-            name,
-            description,
-            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-            specReferences: [SEP_2663_REF, SEP_2322_REF]
-          });
-        } catch (error) {
-          checks.push(
-            failureCheck(id, name, description, error, [
-              SEP_2663_REF,
-              SEP_2322_REF
-            ])
-          );
-        }
-      }
-    }
-
-    // Cleanup the long-lived task so we don't leak goroutines.
+    // Cleanup so the fixture doesn't leak a 60-second goroutine.
     try {
       await client.request(
         { method: 'tasks/cancel', params: { taskId } },

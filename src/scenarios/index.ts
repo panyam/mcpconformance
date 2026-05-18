@@ -66,11 +66,12 @@ import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
 import { TasksLifecycleScenario } from './server/tasks/lifecycle';
 import { TasksCapabilityNegotiationScenario } from './server/tasks/capability';
 import { TasksWireFieldsScenario } from './server/tasks/wire-fields';
-import { TasksRequestStateScenario } from './server/tasks/request-state';
+import { TasksRequestStateRemovalScenario } from './server/tasks/request-state';
 import { TasksMRTRInputScenario } from './server/tasks/mrtr-input';
 import { TasksRequestHeadersScenario } from './server/tasks/headers';
 import { TasksDispatchScenario } from './server/tasks/dispatch';
 import { TasksStatusNotificationsScenario } from './server/tasks/notifications';
+import { TasksRequiredTaskErrorScenario } from './server/tasks/required-task-error';
 import { MrtrEphemeralFlowScenario } from './server/mrtr/ephemeral-flow';
 
 import {
@@ -94,19 +95,20 @@ const pendingClientScenariosList: ClientScenario[] = [
   new ServerSSEPollingScenario(),
 
   // SEP-2663 Tasks extension lifecycle.
-  // The SEP is still in draft (see PR 2663) and the everything-server
-  // does not yet implement the io.modelcontextprotocol/tasks extension,
-  // so all-scenarios.test.ts cannot exercise this against the default
-  // fixture. Active runs target a SEP-2663-conformant server via the
-  // dedicated tasks/lifecycle.test.ts harness.
+  // The everything-server does not implement the
+  // io.modelcontextprotocol/tasks extension, so all-scenarios.test.ts
+  // cannot exercise these against the default fixture. Active runs target
+  // a SEP-2663-conformant server via the dedicated
+  // tasks/all-scenarios.test.ts harness.
   new TasksLifecycleScenario(),
   new TasksCapabilityNegotiationScenario(),
   new TasksWireFieldsScenario(),
-  new TasksRequestStateScenario(),
+  new TasksRequestStateRemovalScenario(),
   new TasksMRTRInputScenario(),
   new TasksRequestHeadersScenario(),
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
+  new TasksRequiredTaskErrorScenario(),
 
   // SEP-2322 MRTR (ephemeral InputRequiredResult flow).
   // Targets a different fixture than tasks scenarios; the dedicated
@@ -172,19 +174,20 @@ const allClientScenariosList: ClientScenario[] = [
   // Security scenarios
   new DNSRebindingProtectionScenario(),
 
-  // SEP-2663 Tasks extension (draft).
-  // Listed here so the CLI can find it by name and so the active/pending
-  // filter sees it; pendingClientScenariosList below excludes it from
-  // automatic runs against the everything-server (which doesn't implement
-  // io.modelcontextprotocol/tasks yet).
+  // SEP-2663 Tasks extension.
+  // Listed here so the CLI can find each scenario by name and so the
+  // active/pending filter sees it; pendingClientScenariosList above
+  // excludes them from automatic runs against the everything-server
+  // (which doesn't implement io.modelcontextprotocol/tasks yet).
   new TasksLifecycleScenario(),
   new TasksCapabilityNegotiationScenario(),
   new TasksWireFieldsScenario(),
-  new TasksRequestStateScenario(),
+  new TasksRequestStateRemovalScenario(),
   new TasksMRTRInputScenario(),
   new TasksRequestHeadersScenario(),
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
+  new TasksRequiredTaskErrorScenario(),
 
   // SEP-2322 MRTR (ephemeral InputRequiredResult flow). Targets a
   // dedicated MRTR fixture — out of scope for the default
