@@ -76,6 +76,11 @@ import { TasksRequiredTaskErrorScenario } from './server/tasks/required-task-err
 import { MrtrEphemeralFlowScenario } from './server/mrtr/ephemeral-flow';
 
 import {
+  HttpHeaderValidationScenario,
+  HttpCustomHeaderServerValidationScenario
+} from './server/http-standard-headers';
+
+import {
   authScenariosList,
   backcompatScenariosList,
   draftScenariosList,
@@ -83,6 +88,12 @@ import {
 } from './client/auth/index';
 import { listMetadataScenarios } from './client/auth/discovery-metadata';
 import { AuthorizationServerMetadataEndpointScenario } from './authorization-server/authorization-server-metadata';
+
+import { HttpStandardHeadersScenario } from './client/http-standard-headers';
+import {
+  HttpCustomHeadersScenario,
+  HttpInvalidToolHeadersScenario
+} from './client/http-custom-headers';
 
 // Pending client scenarios (not yet fully tested/implemented)
 const pendingClientScenariosList: ClientScenario[] = [
@@ -94,6 +105,12 @@ const pendingClientScenariosList: ClientScenario[] = [
   // On hold until server-side SSE improvements are made
   // https://github.com/modelcontextprotocol/typescript-sdk/pull/1129
   new ServerSSEPollingScenario(),
+
+  // HTTP Standardization (SEP-2243)
+  // Pending until the everything-server fully implements SEP-2243
+  // header validation (case-insensitive names, whitespace trimming, -32001 error code)
+  new HttpHeaderValidationScenario(),
+  new HttpCustomHeaderServerValidationScenario(),
 
   // SEP-2663 Tasks extension lifecycle.
   // The everything-server does not implement the
@@ -175,6 +192,10 @@ const allClientScenariosList: ClientScenario[] = [
   // Security scenarios
   new DNSRebindingProtectionScenario(),
 
+  // HTTP Standardization scenarios (SEP-2243)
+  new HttpHeaderValidationScenario(),
+  new HttpCustomHeaderServerValidationScenario(),
+
   // SEP-2663 Tasks extension.
   // Listed here so the CLI can find each scenario by name and so the
   // active/pending filter sees it; pendingClientScenariosList above
@@ -236,7 +257,12 @@ const scenariosList: Scenario[] = [
   ...authScenariosList,
   ...backcompatScenariosList,
   ...draftScenariosList,
-  ...extensionScenariosList
+  ...extensionScenariosList,
+
+  // HTTP Standardization scenarios (SEP-2243)
+  new HttpStandardHeadersScenario(),
+  new HttpCustomHeadersScenario(),
+  new HttpInvalidToolHeadersScenario()
 ];
 
 // Core scenarios (tier 1 requirements)

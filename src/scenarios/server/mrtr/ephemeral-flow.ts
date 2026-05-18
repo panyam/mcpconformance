@@ -25,7 +25,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
+  ScenarioSource,
   DRAFT_PROTOCOL_VERSION
 } from '../../../types';
 import { AnyResult } from '../tasks/helpers';
@@ -43,10 +43,10 @@ import {
 
 export class MrtrEphemeralFlowScenario implements ClientScenario {
   name = 'mrtr-ephemeral-flow';
-  // MRTR is in draft alongside SEP-2322; tagged 'extension' because it
-  // introduces an ephemeral resultType discriminator that's not on the
-  // dated-spec timeline yet.
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  // SEP-2322 ephemeral MRTR is base-spec behaviour (InputRequiredResult on
+  // the tools/call response), tracked on the draft timeline until SEP-2322
+  // lands in a dated release.
+  source: ScenarioSource = { introducedIn: DRAFT_PROTOCOL_VERSION };
   description = `Test SEP-2322 ephemeral MRTR (Multi Round-Trip Request) flow.
 
 **Server Implementation Requirements:**

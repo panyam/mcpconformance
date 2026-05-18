@@ -34,8 +34,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
-  DRAFT_PROTOCOL_VERSION
+  ScenarioSource
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
@@ -47,7 +46,7 @@ import {
 
 export class TasksStatusNotificationsScenario implements ClientScenario {
   name = 'tasks-status-notifications';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
   description = `Test SEP-2663 status notifications (optional).
 
 **Server Implementation Requirements:**

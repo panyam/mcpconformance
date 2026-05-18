@@ -19,8 +19,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
-  DRAFT_PROTOCOL_VERSION
+  ScenarioSource
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
@@ -36,10 +35,7 @@ import { isIso8601 } from '../_shared/wire-format';
 
 export class TasksLifecycleScenario implements ClientScenario {
   name = 'tasks-lifecycle';
-  // 'extension' tags this as off the dated-version timeline (selectable
-  // via `--suite extensions`); DRAFT_PROTOCOL_VERSION lets `--spec-version
-  // draft` runs include it before SEP-2663 lands in a dated release.
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
   description = `Test SEP-2663 Tasks extension lifecycle on the server.
 
 **Server Implementation Requirements (SEP-2663):**

@@ -30,8 +30,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
-  DRAFT_PROTOCOL_VERSION
+  ScenarioSource
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
@@ -43,7 +42,7 @@ import {
 
 export class TasksRequestStateRemovalScenario implements ClientScenario {
   name = 'tasks-request-state-removal';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
   description = `Verify the post-merge removal of \`requestState\` from the tasks-v2 wire.
 
 **Server Implementation Requirements:**

@@ -17,8 +17,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
-  DRAFT_PROTOCOL_VERSION
+  ScenarioSource
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
@@ -33,7 +32,7 @@ import {
 
 export class TasksMRTRInputScenario implements ClientScenario {
   name = 'tasks-mrtr-input';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
   description = `Test SEP-2322 MRTR input flow on the tasks surface.
 
 **Server Implementation Requirements:**

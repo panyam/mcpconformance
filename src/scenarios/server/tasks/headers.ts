@@ -22,8 +22,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
-  DRAFT_PROTOCOL_VERSION
+  ScenarioSource
 } from '../../../types';
 import {
   TASKS_EXTENSION_ID,
@@ -99,7 +98,7 @@ async function rawJsonRpcWithHeaders(
 
 export class TasksRequestHeadersScenario implements ClientScenario {
   name = 'tasks-request-headers';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
   description = `Test SEP-2243 Mcp-Method / Mcp-Name request-header tolerance.
 
 **Server Implementation Requirements:**
