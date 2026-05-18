@@ -32,11 +32,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TasksLifecycleScenario } from './lifecycle';
 import { TasksCapabilityNegotiationScenario } from './capability';
 import { TasksWireFieldsScenario } from './wire-fields';
-import { TasksRequestStateScenario } from './request-state';
+import { TasksRequestStateRemovalScenario } from './request-state';
 import { TasksMRTRInputScenario } from './mrtr-input';
 import { TasksRequestHeadersScenario } from './headers';
 import { TasksDispatchScenario } from './dispatch';
 import { TasksStatusNotificationsScenario } from './notifications';
+import { TasksRequiredTaskErrorScenario } from './required-task-error';
 import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
@@ -49,11 +50,12 @@ const TASKS_SCENARIOS = [
   new TasksLifecycleScenario(),
   new TasksCapabilityNegotiationScenario(),
   new TasksWireFieldsScenario(),
-  new TasksRequestStateScenario(),
+  new TasksRequestStateRemovalScenario(),
   new TasksMRTRInputScenario(),
   new TasksRequestHeadersScenario(),
   new TasksDispatchScenario(),
-  new TasksStatusNotificationsScenario()
+  new TasksStatusNotificationsScenario(),
+  new TasksRequiredTaskErrorScenario()
 ];
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;
