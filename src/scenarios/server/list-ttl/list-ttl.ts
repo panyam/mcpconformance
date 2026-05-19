@@ -1,25 +1,32 @@
 /**
- * SEP-2549 — TTL for List Results — server-conformance scenarios.
+ * SEP-2549 — TTL for List Results — mcpkit-stricter sentinel.
  *
- * Tests an MCP server that emits the optional `ttl` (in seconds)
- * cache-freshness hint on every paginated list response (tools/list,
- * prompts/list, resources/list, resources/templates/list).
+ * SEP-2549 merged Final on the MCP specification on 2026-05-15. Canonical,
+ * brand-neutral conformance coverage of the merged spec lives upstream in
+ * `modelcontextprotocol/conformance` PR 275 (`src/scenarios/server/caching.ts`,
+ * branch `ttl-tests`). This file is a thin sentinel against the mcpkit
+ * example fixture — it verifies the merged wire shape end-to-end and adds
+ * one mcpkit-stricter check the spec deliberately leaves open.
  *
- * Three-state contract per the spec:
- *   - absent  (`ttl` field omitted)         no server guidance
- *   - 0       (`"ttl": 0` explicit)         do not cache, always re-fetch
- *   - >0      (`"ttl": N`)                  fresh for N seconds
+ * Merged wire shape, on `tools/list`, `prompts/list`, `resources/list`,
+ * `resources/templates/list`, and `resources/read`:
+ *   - `ttlMs`      number, integer milliseconds, cache-freshness hint
+ *   - `cacheScope` string, "public" | "private", absent defaults to "public"
  *
- * The scenario exercises all three states, which requires three
- * separate fixture servers (one per state) — the wire shape of "absent"
- * cannot be expressed by a single multi-state server. The scenario
- * receives the positive-TTL URL via the standard `run(serverUrl)`
- * interface and reads the other two from the environment:
- *   - LIST_TTL_ZERO_URL   — server with explicit zero TTL
- *   - LIST_TTL_UNSET_URL  — server with no TTL configured
+ * Per the merged spec an absent `ttlMs` and an explicit `ttlMs: 0` are
+ * client-equivalent ("immediately stale"). The mcpkit-stricter check below
+ * verifies the example fixture nonetheless keeps the two distinct on the
+ * wire — a server that conflates them (e.g. a naive `int` + `omitempty`)
+ * is still spec-conformant, so this check is sentinel-only, not a spec gate.
  *
- * If either env var is missing the affected checks emit `INFO` rather
- * than failing — they're "couldn't verify" rather than "spec violation."
+ * Verifying the three ttlMs states needs three fixture servers, one per
+ * state. The scenario receives the positive-ttlMs URL via the standard
+ * `run(serverUrl)` argument and reads the other two from the environment:
+ *   - LIST_TTL_ZERO_URL   — fixture with explicit `ttlMs: 0`
+ *   - LIST_TTL_UNSET_URL  — fixture with no cache hints configured
+ *
+ * If either env var is missing the affected checks emit `INFO` rather than
+ * failing — they are "couldn't verify" rather than "spec violation."
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -37,66 +44,66 @@ const SEP_2549_REF: SpecReference = {
   url: 'https://github.com/modelcontextprotocol/specification/pull/2549'
 };
 
-// Passthrough Zod schema — preserves `ttl` on list responses (the SDK's
-// typed list-result schemas would strip unknown fields).
+// Passthrough Zod schema — preserves `ttlMs` / `cacheScope` on responses
+// (the SDK's typed result schemas would strip unknown fields).
 const AnyResult = z.object({}).passthrough();
 
-const LIST_METHODS = [
-  'tools/list',
-  'prompts/list',
-  'resources/list',
-  'resources/templates/list'
-] as const;
-
-const LIST_PAYLOAD_KEYS: Record<(typeof LIST_METHODS)[number], string> = {
-  'tools/list': 'tools',
-  'prompts/list': 'prompts',
-  'resources/list': 'resources',
-  'resources/templates/list': 'resourceTemplates'
-};
+// The five SEP-2549 cacheable endpoints. resources/read joined the coverage
+// list mid-cycle; the mcpkit example registers file:///fixture for it.
+const ENDPOINTS: ReadonlyArray<{
+  method: string;
+  params: Record<string, unknown>;
+  payloadKey: string;
+}> = [
+  { method: 'tools/list', params: {}, payloadKey: 'tools' },
+  { method: 'prompts/list', params: {}, payloadKey: 'prompts' },
+  { method: 'resources/list', params: {}, payloadKey: 'resources' },
+  {
+    method: 'resources/templates/list',
+    params: {},
+    payloadKey: 'resourceTemplates'
+  },
+  {
+    method: 'resources/read',
+    params: { uri: 'file:///fixture' },
+    payloadKey: 'contents'
+  }
+];
 
 export class ListTtlScenario implements ClientScenario {
   name = 'list-ttl';
   readonly source = { introducedIn: DRAFT_PROTOCOL_VERSION } as const;
-  description = `Test SEP-2549 TTL hints on paginated list responses across all three TTL states.
+  description = `mcpkit-stricter sentinel for SEP-2549 (TTL for List Results).
 
-**Server Implementation Requirements:**
+Canonical, brand-neutral coverage of the merged spec lives upstream in
+\`modelcontextprotocol/conformance\` PR 275 (\`src/scenarios/server/caching.ts\`).
+This sentinel verifies the merged wire shape end-to-end against the mcpkit
+example fixture and adds one mcpkit-stricter check.
 
-Every paginated list response (\`tools/list\`, \`prompts/list\`,
-\`resources/list\`, \`resources/templates/list\`) MAY carry an optional
-\`ttl\` field (number, seconds) hinting at cache freshness. The wire
-contract distinguishes three states:
+**Merged wire shape:**
 
-- **Absent** — server provides no guidance. Clients fall back to
-  list_changed notifications or their own heuristics. The \`ttl\` key
-  MUST NOT appear on the wire.
-- **Explicit 0** — "do not cache, always re-fetch." The \`ttl\` key
-  MUST be present with value \`0\`. This case catches servers that
-  conflate "absent" and "0" (e.g., a naive \`int\` field with
-  \`omitempty\` that drops &0).
-- **Positive N** — fresh for N seconds. The \`ttl\` key MUST be
-  present with value \`N\`.
+Each of \`tools/list\`, \`prompts/list\`, \`resources/list\`,
+\`resources/templates/list\`, and \`resources/read\` MAY carry:
 
-**Type guarantees:**
-- When present, \`ttl\` MUST be a JSON number (integer seconds).
-- The same TTL state MUST surface uniformly on all four list endpoints
-  (servers can't differentiate per-method without explicit mechanism).
-- TTL coexists with the existing list payload arrays
-  (\`tools\`/\`prompts\`/\`resources\`/\`resourceTemplates\`); it
-  doesn't replace them or interfere with cursor-based pagination.
+- \`ttlMs\` — number, integer milliseconds, cache-freshness hint.
+- \`cacheScope\` — string, \`"public"\` or \`"private"\`; absent defaults
+  to \`"public"\`.
 
-**Three-fixture contract (this scenario):**
+**ttlMs states (three fixtures):**
 
-Verifying all three states requires three independent fixture servers,
-one per state. The scenario reads the positive-TTL URL via the standard
-\`run(serverUrl)\` argument; the other two come from environment
-variables:
+- **Positive** — \`ttlMs\` present, positive integer; fresh for N ms.
+- **Explicit zero** — \`ttlMs\` present with value \`0\`; immediately stale.
+- **Unset** — \`ttlMs\` absent; clients treat it the same as \`0\`.
 
-- \`LIST_TTL_ZERO_URL\` — fixture with explicit-zero TTL
-- \`LIST_TTL_UNSET_URL\` — fixture with no TTL configured
+Per the merged spec absent and \`0\` are client-equivalent. The
+\`list-ttl-explicit-zero-distinct\` check verifies the mcpkit fixture keeps
+them distinct on the wire anyway — a server that conflates them is still
+conformant, so that check is sentinel-only.
 
-When either is missing, the affected checks emit \`INFO\` (couldn't
-verify) rather than \`FAILURE\`.`;
+**Three-fixture contract:** the scenario reads the positive-ttlMs URL via
+\`run(serverUrl)\`; \`LIST_TTL_ZERO_URL\` and \`LIST_TTL_UNSET_URL\` come
+from the environment. Missing env vars downgrade the affected checks to
+\`INFO\`.`;
 
   async run(serverUrl: string): Promise<ConformanceCheck[]> {
     const checks: ConformanceCheck[] = [];
@@ -112,7 +119,7 @@ verify) rather than \`FAILURE\`.`;
         id: 'list-ttl-session-bootstrap',
         name: 'ListTtlSessionBootstrap',
         description:
-          'Initialize handshake against positive-TTL fixture succeeds',
+          'Initialize handshake against the positive-ttlMs fixture succeeds',
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: `Failed to initialize: ${errMsg(error)}`,
@@ -121,102 +128,82 @@ verify) rather than \`FAILURE\`.`;
       return checks;
     }
 
-    // Check 1: positive TTL surfaces on all four list endpoints with the
-    // expected positive value AND is a JSON number.
+    // Check 1: positive ttlMs surfaces on every cacheable endpoint as a
+    // positive integer JSON number, uniform across endpoints. The payload
+    // array coexists with the hint (regression guard against field swaps).
     {
-      const id = 'list-ttl-positive-on-all-endpoints';
-      const name = 'ListTtlPositiveOnAllEndpoints';
+      const id = 'list-ttl-ms-positive-on-all-endpoints';
+      const name = 'ListTtlMsPositiveOnAllEndpoints';
       const description =
-        'Positive TTL surfaces on all four list endpoints; value is a positive integer';
+        'ttlMs surfaces on all five SEP-2549 endpoints as a uniform positive integer, alongside the payload';
       try {
         const errs: string[] = [];
-        let observedTtl: number | null = null;
-        for (const method of LIST_METHODS) {
+        let observed: number | null = null;
+        for (const ep of ENDPOINTS) {
           const result = (await positive.request(
-            { method, params: {} },
+            { method: ep.method, params: ep.params },
             AnyResult
           )) as any;
-          if (typeof result.ttl !== 'number') {
+          if (typeof result.ttlMs !== 'number') {
             errs.push(
-              `${method}: ttl MUST be a number; got ${typeof result.ttl}`
+              `${ep.method}: ttlMs MUST be a number; got ${typeof result.ttlMs}`
             );
-            continue;
-          }
-          if (!Number.isInteger(result.ttl)) {
-            errs.push(`${method}: ttl = ${result.ttl}, want integer`);
-          }
-          if (result.ttl <= 0) {
+          } else if (!Number.isInteger(result.ttlMs)) {
+            errs.push(`${ep.method}: ttlMs = ${result.ttlMs}, want integer`);
+          } else if (result.ttlMs <= 0) {
             errs.push(
-              `${method}: ttl = ${result.ttl}, want positive (this fixture should advertise a positive TTL)`
+              `${ep.method}: ttlMs = ${result.ttlMs}, want positive on this fixture`
+            );
+          } else if (observed === null) {
+            observed = result.ttlMs;
+          } else if (observed !== result.ttlMs) {
+            errs.push(
+              `${ep.method}: ttlMs = ${result.ttlMs}, expected uniform (${observed})`
             );
           }
-          if (observedTtl === null) {
-            observedTtl = result.ttl;
-          } else if (observedTtl !== result.ttl) {
+          if (!(ep.payloadKey in result)) {
             errs.push(
-              `${method}: ttl = ${result.ttl}, expected uniform across endpoints (${observedTtl})`
+              `${ep.method}: payload key "${ep.payloadKey}" missing alongside ttlMs`
             );
           }
         }
-        checks.push({
-          id,
-          name,
-          description,
-          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-          specReferences: [SEP_2549_REF],
-          details: { observedTtl }
-        });
+        checks.push(
+          resultCheck(id, name, description, errs, { observedTtlMs: observed })
+        );
       } catch (error) {
         checks.push(failureCheck(id, name, description, error, [SEP_2549_REF]));
       }
     }
 
-    // Check 2: explicit zero TTL is preserved (not omitted).
+    // Check 2 (mcpkit-stricter): explicit `ttlMs: 0` is present on the wire,
+    // distinct from the absent case. The merged spec treats absent and 0 as
+    // client-equivalent, so this is a sentinel-only check, not a spec gate.
     {
-      const id = 'list-ttl-explicit-zero-preserved';
-      const name = 'ListTtlExplicitZeroPreserved';
+      const id = 'list-ttl-explicit-zero-distinct';
+      const name = 'ListTtlExplicitZeroDistinct';
       const description =
-        'Explicit zero TTL ("do not cache") is present on the wire on every list endpoint — distinguishable from the absent case';
+        'mcpkit-stricter: explicit ttlMs:0 is present on the wire, distinct from absent (spec treats the two as client-equivalent)';
       if (!zeroUrl) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'INFO',
-          timestamp: new Date().toISOString(),
-          errorMessage:
-            'LIST_TTL_ZERO_URL env var not set; cannot verify explicit-zero behavior',
-          specReferences: [SEP_2549_REF]
-        });
+        checks.push(infoCheck(id, name, description, 'LIST_TTL_ZERO_URL'));
       } else {
         try {
           const zero = await connect(zeroUrl);
           const errs: string[] = [];
-          for (const method of LIST_METHODS) {
+          for (const ep of ENDPOINTS) {
             const result = (await zero.request(
-              { method, params: {} },
+              { method: ep.method, params: ep.params },
               AnyResult
             )) as any;
-            if (!('ttl' in result)) {
+            if (!('ttlMs' in result)) {
               errs.push(
-                `${method}: ttl field MUST be present when server explicitly sets 0; raw=${JSON.stringify(result)}`
+                `${ep.method}: ttlMs MUST be present when the fixture sets 0; raw=${JSON.stringify(result)}`
               );
-            } else if (result.ttl !== 0) {
-              errs.push(`${method}: ttl = ${result.ttl}, want 0`);
+            } else if (result.ttlMs !== 0) {
+              errs.push(`${ep.method}: ttlMs = ${result.ttlMs}, want 0`);
             }
           }
           await zero.close();
-          checks.push({
-            id,
-            name,
-            description,
-            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-            specReferences: [SEP_2549_REF]
-          });
+          checks.push(resultCheck(id, name, description, errs));
         } catch (error) {
           checks.push(
             failureCheck(id, name, description, error, [SEP_2549_REF])
@@ -225,48 +212,36 @@ verify) rather than \`FAILURE\`.`;
       }
     }
 
-    // Check 3: ttl field is absent when server has no TTL configured.
+    // Check 3: ttlMs is absent when the server configures no cache hints.
     {
-      const id = 'list-ttl-absent-when-unset';
-      const name = 'ListTtlAbsentWhenUnset';
+      const id = 'list-ttl-ms-absent-when-unset';
+      const name = 'ListTtlMsAbsentWhenUnset';
       const description =
-        'ttl field MUST be absent (not present-with-zero) when server has no TTL configured — clients fall back to list_changed';
+        'ttlMs is absent when the server has no cache hints configured';
       if (!unsetUrl) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'INFO',
-          timestamp: new Date().toISOString(),
-          errorMessage:
-            'LIST_TTL_UNSET_URL env var not set; cannot verify the absent path',
-          specReferences: [SEP_2549_REF]
-        });
+        checks.push(infoCheck(id, name, description, 'LIST_TTL_UNSET_URL'));
       } else {
         try {
           const unset = await connect(unsetUrl);
           const errs: string[] = [];
-          for (const method of LIST_METHODS) {
+          for (const ep of ENDPOINTS) {
             const result = (await unset.request(
-              { method, params: {} },
+              { method: ep.method, params: ep.params },
               AnyResult
             )) as any;
-            if ('ttl' in result) {
+            if ('ttlMs' in result) {
               errs.push(
-                `${method}: ttl MUST be absent when server has no TTL; raw=${JSON.stringify(result)}`
+                `${ep.method}: ttlMs MUST be absent on the unset fixture; raw=${JSON.stringify(result)}`
+              );
+            }
+            if ('cacheScope' in result) {
+              errs.push(
+                `${ep.method}: cacheScope MUST be absent on the unset fixture; raw=${JSON.stringify(result)}`
               );
             }
           }
           await unset.close();
-          checks.push({
-            id,
-            name,
-            description,
-            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-            specReferences: [SEP_2549_REF]
-          });
+          checks.push(resultCheck(id, name, description, errs));
         } catch (error) {
           checks.push(
             failureCheck(id, name, description, error, [SEP_2549_REF])
@@ -275,68 +250,60 @@ verify) rather than \`FAILURE\`.`;
       }
     }
 
-    // Check 4: ttl coexists with the list payload arrays.
+    // Check 4: cacheScope surfaces as the expected enum string on every
+    // endpoint. The positive fixture advertises "public".
     {
-      const id = 'list-ttl-coexists-with-payload';
-      const name = 'ListTtlCoexistsWithPayload';
+      const id = 'list-ttl-cache-scope';
+      const name = 'ListTtlCacheScope';
       const description =
-        "TTL doesn't disturb cursor pagination or the existing payload arrays — regression guard against future field swaps";
+        'cacheScope surfaces on all five SEP-2549 endpoints as a "public"/"private" string';
       try {
         const errs: string[] = [];
-        for (const method of LIST_METHODS) {
+        for (const ep of ENDPOINTS) {
           const result = (await positive.request(
-            { method, params: {} },
+            { method: ep.method, params: ep.params },
             AnyResult
           )) as any;
-          const expectedKey = LIST_PAYLOAD_KEYS[method];
-          if (!Array.isArray(result[expectedKey])) {
+          if (!('cacheScope' in result)) {
             errs.push(
-              `${method}: ${expectedKey} array must be present alongside ttl; raw=${JSON.stringify(result)}`
+              `${ep.method}: cacheScope MUST be present on this fixture; raw=${JSON.stringify(result)}`
+            );
+          } else if (
+            result.cacheScope !== 'public' &&
+            result.cacheScope !== 'private'
+          ) {
+            errs.push(
+              `${ep.method}: cacheScope = ${JSON.stringify(result.cacheScope)}, want "public" or "private"`
             );
           }
         }
-        checks.push({
-          id,
-          name,
-          description,
-          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-          specReferences: [SEP_2549_REF]
-        });
+        checks.push(resultCheck(id, name, description, errs));
       } catch (error) {
         checks.push(failureCheck(id, name, description, error, [SEP_2549_REF]));
       }
     }
 
-    // Check 5: ttl wire type is JSON number (catches *string-encoded TTLs).
+    // Check 5: the pre-merge `ttl` (integer seconds) field MUST NOT appear —
+    // regression guard for the SEP-2549 ttl -> ttlMs rename.
     {
-      const id = 'list-ttl-wire-type-is-number';
-      const name = 'ListTtlWireTypeIsNumber';
+      const id = 'list-ttl-no-stale-seconds-field';
+      const name = 'ListTtlNoStaleSecondsField';
       const description =
-        'TTL MUST be a JSON number when present, never a string or boolean';
+        'the pre-merge `ttl` (seconds) field is gone — renamed to ttlMs (milliseconds)';
       try {
-        const result = (await positive.request(
-          { method: 'tools/list', params: {} },
-          AnyResult
-        )) as any;
         const errs: string[] = [];
-        if (typeof result.ttl !== 'number') {
-          errs.push(
-            `ttl wire type = ${typeof result.ttl} (${JSON.stringify(result.ttl)}), want "number"`
-          );
-        } else if (!Number.isInteger(result.ttl)) {
-          errs.push(`ttl = ${result.ttl}, want integer`);
+        for (const ep of ENDPOINTS) {
+          const result = (await positive.request(
+            { method: ep.method, params: ep.params },
+            AnyResult
+          )) as any;
+          if ('ttl' in result) {
+            errs.push(
+              `${ep.method}: stale \`ttl\` field present; SEP-2549 renamed it to ttlMs; raw=${JSON.stringify(result)}`
+            );
+          }
         }
-        checks.push({
-          id,
-          name,
-          description,
-          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-          specReferences: [SEP_2549_REF]
-        });
+        checks.push(resultCheck(id, name, description, errs));
       } catch (error) {
         checks.push(failureCheck(id, name, description, error, [SEP_2549_REF]));
       }
@@ -362,6 +329,42 @@ async function connect(serverUrl: string): Promise<Client> {
 
 function errMsg(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function resultCheck(
+  id: string,
+  name: string,
+  description: string,
+  errs: string[],
+  details?: Record<string, unknown>
+): ConformanceCheck {
+  return {
+    id,
+    name,
+    description,
+    status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+    timestamp: new Date().toISOString(),
+    errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+    specReferences: [SEP_2549_REF],
+    details
+  };
+}
+
+function infoCheck(
+  id: string,
+  name: string,
+  description: string,
+  missingEnvVar: string
+): ConformanceCheck {
+  return {
+    id,
+    name,
+    description,
+    status: 'INFO',
+    timestamp: new Date().toISOString(),
+    errorMessage: `${missingEnvVar} env var not set; cannot verify this fixture`,
+    specReferences: [SEP_2549_REF]
+  };
 }
 
 function failureCheck(
