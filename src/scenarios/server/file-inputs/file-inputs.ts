@@ -34,7 +34,6 @@ import { z } from 'zod';
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
   SpecReference,
   DRAFT_PROTOCOL_VERSION
 } from '../../../types';
@@ -50,7 +49,7 @@ const AnyResult = z.object({}).passthrough();
 
 export class FileInputsScenario implements ClientScenario {
   name = 'file-inputs';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  readonly source = { introducedIn: DRAFT_PROTOCOL_VERSION } as const;
   description = `Test SEP-2356 file inputs end-to-end on the server.
 
 **Server Implementation Requirements:**

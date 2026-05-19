@@ -27,7 +27,6 @@
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
   SpecReference,
   LATEST_SPEC_VERSION
 } from '../../../types';
@@ -85,7 +84,7 @@ function pathOf(serverUrl: string): string {
 
 export class AuthOAuthDiscoveryScenario implements ClientScenario {
   name = 'auth-oauth-discovery';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
   description = `Test that an MCP server exposes the OAuth 2.0 discovery surface required by the MCP authorization spec (2025-11-25).
 
 **Server Implementation Requirements:**
@@ -511,7 +510,7 @@ async function postToolsCall(
 
 export class AuthJwtValidationScenario implements ClientScenario {
   name = 'auth-jwt-validation';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
   description = `Test that an MCP server enforces Bearer-token validation on auth-gated methods per the MCP authorization spec (2025-11-25) + RFC 6750.
 
 **Server Implementation Requirements:**
@@ -803,7 +802,7 @@ it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
 
 export class AuthJwtClaimsScenario implements ClientScenario {
   name = 'auth-jwt-claims';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
   description = `Test that an MCP server enforces JWT claim validation per RFC 7519 + the MCP authorization spec (2025-11-25).
 
 **Server Implementation Requirements:**
@@ -1036,7 +1035,7 @@ function getAuthParam(header: string, key: string): string | null {
 
 export class AuthScopeStepUpScenario implements ClientScenario {
   name = 'auth-scope-step-up';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
   description = `Test that an MCP server enforces per-tool scope requirements and advertises the missing scope in WWW-Authenticate per SEP-2350 + RFC 6750 §3.1.
 
 **Server Implementation Requirements:**
@@ -1539,7 +1538,7 @@ async function fetchAsMetadata(serverUrl: string): Promise<AsMetadataFetch> {
 
 export class AuthIssParamScenario implements ClientScenario {
   name = 'auth-iss-param';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
   description = `Test that an MCP server's Authorization Server implements RFC 9207 OAuth 2.0 Authorization Server Issuer Identification.
 
 **Server Implementation Requirements:**
@@ -1639,7 +1638,9 @@ suite grows an OAuth code-flow driver.`;
 
 export class AuthEnterpriseManagedScenario implements ClientScenario {
   name = 'auth-enterprise-managed';
-  specVersions: ScenarioSpecTag[] = ['extension', LATEST_SPEC_VERSION];
+  readonly source = {
+    extensionId: 'io.modelcontextprotocol/enterprise-managed-authorization'
+  } as const;
   description = `Test that an MCP server's Authorization Server supports the OAuth grant types required for enterprise-managed identity flows: RFC 8693 token-exchange and RFC 7523 JWT bearer client/auth grant.
 
 **Server Implementation Requirements:**

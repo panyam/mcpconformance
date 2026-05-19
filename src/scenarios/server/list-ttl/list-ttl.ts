@@ -28,7 +28,6 @@ import { z } from 'zod';
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSpecTag,
   SpecReference,
   DRAFT_PROTOCOL_VERSION
 } from '../../../types';
@@ -58,7 +57,7 @@ const LIST_PAYLOAD_KEYS: Record<(typeof LIST_METHODS)[number], string> = {
 
 export class ListTtlScenario implements ClientScenario {
   name = 'list-ttl';
-  specVersions: ScenarioSpecTag[] = ['extension', DRAFT_PROTOCOL_VERSION];
+  readonly source = { introducedIn: DRAFT_PROTOCOL_VERSION } as const;
   description = `Test SEP-2549 TTL hints on paginated list responses across all three TTL states.
 
 **Server Implementation Requirements:**
