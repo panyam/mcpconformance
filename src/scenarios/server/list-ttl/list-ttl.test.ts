@@ -1,8 +1,12 @@
 /**
- * SEP-2549 List-TTL test runner.
+ * SEP-2549 List-TTL test runner (mcpkit-stricter sentinel).
+ *
+ * Canonical SEP-2549 coverage lives upstream in
+ * modelcontextprotocol/conformance PR 275 (src/scenarios/server/caching.ts).
+ * This runner drives the thin mcpkit sentinel in ./list-ttl.ts.
  *
  * Iterates the list-ttl scenario against three SEP-2549-conformant
- * fixtures (positive / explicit-zero / unset TTL). Configuration:
+ * fixtures (positive / explicit-zero / unset ttlMs). Configuration:
  *
  *   1. Point at three already-running servers:
  *        LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
@@ -23,8 +27,8 @@
  * `LIST_TTL_ZERO_URL` / `LIST_TTL_UNSET_URL` cause those checks to emit
  * INFO instead of FAILURE — verifying all three states is best-effort.
  *
- * The fixture servers can be implemented in any language; one example
- * reference impl spawns three Go binaries from
+ * The fixture servers can be implemented in any language; the reference
+ * impl spawns three Go binaries from
  * https://github.com/panyam/mcpkit/tree/main/examples/list-ttl.
  */
 
