@@ -1,24 +1,21 @@
 /**
- * SEP-2663 Tasks Extension — `requestState` removal conformance.
+ * SEP-2663 Tasks Extension — `requestState` absence on the tasks-v2 wire.
  *
- * The pre-merge SEP-2663 defined a "Request State Management" section
- * that let servers attach an opaque `requestState` token to task-bearing
- * messages (CreateTaskResult, tasks/get, notifications/tasks). The
- * merged Final SEP-2663 removes the field from the `Task` base
- * interface and deletes that entire section, so the tasks-v2 wire
- * carries no `requestState`.
+ * SEP-2663 does not define a `requestState` field on the tasks-v2 wire.
+ * This scenario asserts the absence on the two task-bearing message
+ * shapes that a server can populate at task creation and during polling:
  *
- * This scenario asserts the absence:
- *   - CreateTaskResult MUST NOT carry `requestState`.
- *   - DetailedTask (tasks/get response) MUST NOT carry `requestState`,
+ *   - `CreateTaskResult` MUST NOT carry `requestState`.
+ *   - `DetailedTask` (tasks/get response) MUST NOT carry `requestState`,
  *     regardless of status.
  *
- * The notifications/tasks payload absence-assert lives in
- * notifications.ts so the SSE-observation harness is not duplicated.
- *
- * SEP-2322's InputRequiredResult still carries `requestState` — that is
- * the MRTR multi-round-trip surface, not the tasks-v2 wire, and is
- * tested separately in mrtr-input.ts.
+ * Why a negative test exists for a field the spec never defines:
+ * SEP-2322 (MRTR) places `requestState` on `InputRequiredResult` — the
+ * same JSON shape slot a fresh implementer might also reach for on the
+ * tasks-v2 `DetailedTask` while reading the two SEPs together. The
+ * absence-assert here catches that cross-SEP confusion. SEP-2322's
+ * `InputRequiredResult.requestState` is unrelated to the tasks-v2 wire
+ * and is exercised by mrtr-input.ts.
  *
  * Required server fixtures:
  *   - slow_compute  — task-supporting, sleeps N seconds
@@ -43,14 +40,12 @@ import {
 export class TasksRequestStateRemovalScenario implements ClientScenario {
   name = 'tasks-request-state-removal';
   source: ScenarioSource = { extensionId: 'io.modelcontextprotocol/tasks' };
-  description = `Verify the post-merge removal of \`requestState\` from the tasks-v2 wire.
+  description = `Verify the absence of \`requestState\` on the tasks-v2 wire.
 
 **Server Implementation Requirements:**
 
-The merged SEP-2663 dropped the \`requestState?: string\` field from
-the \`Task\` base interface and removed the entire "Request State
-Management" section. The Final spec does not define \`requestState\` on
-any tasks-v2 wire shape.
+SEP-2663 does not define a \`requestState\` field on the \`Task\` base
+interface, so:
 
 - \`CreateTaskResult\` MUST NOT carry \`requestState\` on the
   \`tools/call\` response that creates a task.
@@ -58,9 +53,12 @@ any tasks-v2 wire shape.
   \`requestState\` for any status (\`working\` / \`input_required\` /
   \`completed\` / \`cancelled\` / \`failed\`).
 
-SEP-2322's \`InputRequiredResult\` still carries \`requestState\` on the
-MRTR (multi-round-trip) surface — that is unrelated to the tasks-v2
-wire and is exercised by mrtr-input.ts.`;
+SEP-2322's \`InputRequiredResult\` does carry \`requestState\` — that is
+the MRTR multi-round-trip surface, unrelated to the tasks-v2 wire, and
+is exercised by mrtr-input.ts. This scenario exists because the two
+SEPs put \`requestState\` in lexically adjacent positions, making
+accidental copy-paste from the MRTR shape into the tasks-v2 shape a
+foreseeable mistake for fresh implementations.`;
 
   async run(serverUrl: string): Promise<ConformanceCheck[]> {
     const checks: ConformanceCheck[] = [];
@@ -140,7 +138,7 @@ wire and is exercised by mrtr-input.ts.`;
       const id = 'tasks-create-result-no-request-state';
       const name = 'TasksCreateResultNoRequestState';
       const description =
-        'CreateTaskResult MUST NOT carry `requestState` (the merged SEP-2663 removed the field from the Task base interface)';
+        'CreateTaskResult MUST NOT carry `requestState` (SEP-2663 does not define the field on the Task base interface)';
       const has = Object.prototype.hasOwnProperty.call(
         createdTask,
         'requestState'
@@ -152,7 +150,7 @@ wire and is exercised by mrtr-input.ts.`;
         status: has ? 'FAILURE' : 'SUCCESS',
         timestamp: new Date().toISOString(),
         errorMessage: has
-          ? `CreateTaskResult carries requestState = ${JSON.stringify(createdTask.requestState)}; the merged spec removed this field from the tasks-v2 wire.`
+          ? `CreateTaskResult carries requestState = ${JSON.stringify(createdTask.requestState)}; SEP-2663 does not define this field on the tasks-v2 wire.`
           : undefined,
         specReferences: [SEP_2663_REF]
       });
@@ -163,7 +161,7 @@ wire and is exercised by mrtr-input.ts.`;
       const id = 'tasks-get-detailed-no-request-state';
       const name = 'TasksGetDetailedNoRequestState';
       const description =
-        'tasks/get response (DetailedTask) MUST NOT carry `requestState` for any status (per the merged SEP-2663)';
+        'tasks/get response (DetailedTask) MUST NOT carry `requestState` for any status (per SEP-2663)';
       try {
         const detailed = (await client.request(
           { method: 'tasks/get', params: { taskId } },
@@ -180,7 +178,7 @@ wire and is exercised by mrtr-input.ts.`;
           status: has ? 'FAILURE' : 'SUCCESS',
           timestamp: new Date().toISOString(),
           errorMessage: has
-            ? `DetailedTask carries requestState = ${JSON.stringify(detailed.requestState)} (status=${detailed.status}); the merged spec removed this field from the tasks-v2 wire.`
+            ? `DetailedTask carries requestState = ${JSON.stringify(detailed.requestState)} (status=${detailed.status}); SEP-2663 does not define this field on the tasks-v2 wire.`
             : undefined,
           specReferences: [SEP_2663_REF],
           details: { observedStatus: detailed.status }
@@ -190,7 +188,6 @@ wire and is exercised by mrtr-input.ts.`;
       }
     }
 
-    // Cleanup so the fixture doesn't leak a 60-second goroutine.
     try {
       await client.request(
         { method: 'tasks/cancel', params: { taskId } },

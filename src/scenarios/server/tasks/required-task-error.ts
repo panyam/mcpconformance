@@ -1,15 +1,16 @@
 /**
  * SEP-2663 Tasks Extension — required-task error conformance.
  *
- * The merged SEP-2663 says that a server which cannot service a request
- * without returning `CreateTaskResult` — i.e. the tool's declared task
- * support is "required" — MUST return JSON-RPC error code `-32003`
- * ("Missing Required Client Capability") when the client did not
- * declare the `io.modelcontextprotocol/tasks` extension during
- * `initialize`. The error data SHOULD carry a `requiredCapabilities`
- * object whose shape mirrors the `InitializeRequest` capabilities, so
- * the client can self-describe what to add without needing out-of-band
- * documentation.
+ * SEP-2575 (Stateless MCP) §"Missing Required Capabilities" defines
+ * JSON-RPC error code `-32003` for the case where a server cannot
+ * service a request without a client capability the client did not
+ * declare. SEP-2663 §"Required Capabilities" applies that rule to the
+ * tasks extension: if a tool's declared task support is "required" and
+ * the client did not declare `io.modelcontextprotocol/tasks` during
+ * `initialize`, the server MUST reject with `-32003`. The error data
+ * SHOULD carry a `requiredCapabilities` object whose shape mirrors the
+ * `InitializeRequest` capabilities, so the client can self-describe
+ * what to add without needing out-of-band documentation.
  *
  * This scenario verifies the failure path:
  *   1. Initialize a session WITHOUT declaring the tasks extension.
@@ -17,11 +18,6 @@
  *   3. Expect a JSON-RPC error with `code: -32003` and
  *      `data.requiredCapabilities.extensions["io.modelcontextprotocol/tasks"]`
  *      present.
- *
- * A server that silently downgrades to synchronous execution in this
- * case regresses against the merged spec — the spec phrasing is
- * "unable to service a request ... without returning CreateTaskResult",
- * not "may opt out at its discretion".
  *
  * Required server fixtures:
  *   - failing_job — a tool registered with task support declared as
@@ -40,7 +36,13 @@ import {
   ConformanceCheck,
   ScenarioSource
 } from '../../../types';
-import { TASKS_EXTENSION_ID, SEP_2663_REF, AnyResult, errMsg } from './helpers';
+import {
+  TASKS_EXTENSION_ID,
+  SEP_2575_REF,
+  SEP_2663_REF,
+  AnyResult,
+  errMsg
+} from './helpers';
 
 const MISSING_REQUIRED_CLIENT_CAPABILITY = -32003;
 const REQUIRED_TASK_TOOL = 'failing_job';
@@ -53,8 +55,8 @@ client has not negotiated the io.modelcontextprotocol/tasks extension.
 
 **Server Implementation Requirements:**
 
-The merged SEP-2663 carries the following requirement in its "Required
-Capabilities" treatment of the tasks extension:
+Per SEP-2575 §"Missing Required Capabilities" and SEP-2663 §"Required
+Capabilities":
 
 > If a server is unable to service a request to a client that does not
 > declare this extension capability without returning \`CreateTaskResult\`,
@@ -77,8 +79,7 @@ shape mirrors \`InitializeRequest.capabilities\`, e.g.
 
 The scenario calls \`tools/call\` for a tool registered with task support
 \`required\` from a client that did NOT declare the extension. A
-conformant server MUST reject with \`-32003\`; it MUST NOT silently
-downgrade to synchronous execution.`;
+conformant server MUST reject with \`-32003\`.`;
 
   async run(serverUrl: string): Promise<ConformanceCheck[]> {
     const checks: ConformanceCheck[] = [];
@@ -103,7 +104,7 @@ downgrade to synchronous execution.`;
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: `Failed to initialize: ${errMsg(error)}`,
-        specReferences: [SEP_2663_REF]
+        specReferences: [SEP_2575_REF, SEP_2663_REF]
       });
       return checks;
     }
@@ -147,7 +148,7 @@ downgrade to synchronous execution.`;
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: `tools/call for ${REQUIRED_TASK_TOOL} returned a successful response from a client that did not declare ${TASKS_EXTENSION_ID}; spec requires -32003 rejection in this case.`,
-        specReferences: [SEP_2663_REF]
+        specReferences: [SEP_2575_REF, SEP_2663_REF]
       });
       await client.close().catch(() => {});
       return checks;
@@ -161,7 +162,7 @@ downgrade to synchronous execution.`;
         status: 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: `tools/call for ${REQUIRED_TASK_TOOL} returned error code ${observed.code ?? '(unknown)'}; spec requires ${MISSING_REQUIRED_CLIENT_CAPABILITY}.`,
-        specReferences: [SEP_2663_REF],
+        specReferences: [SEP_2575_REF, SEP_2663_REF],
         details: { observedCode: observed.code }
       });
       await client.close().catch(() => {});
@@ -174,7 +175,7 @@ downgrade to synchronous execution.`;
       description,
       status: 'SUCCESS',
       timestamp: new Date().toISOString(),
-      specReferences: [SEP_2663_REF]
+      specReferences: [SEP_2575_REF, SEP_2663_REF]
     });
 
     // Check 2: the error data carries the structured `requiredCapabilities`
@@ -184,7 +185,7 @@ downgrade to synchronous execution.`;
     {
       const id2 = 'tasks-required-task-error-data-shape';
       const name2 = 'TasksRequiredTaskErrorDataShape';
-      const description2 = `Error data for -32003 SHOULD carry data.requiredCapabilities.extensions["${TASKS_EXTENSION_ID}"] (spec example in PR 2663)`;
+      const description2 = `Error data for -32003 SHOULD carry data.requiredCapabilities.extensions["${TASKS_EXTENSION_ID}"]`;
       const data = observed.data as any;
       if (data === undefined || data === null) {
         checks.push({
@@ -195,7 +196,7 @@ downgrade to synchronous execution.`;
           timestamp: new Date().toISOString(),
           errorMessage:
             'Error returned -32003 but carried no `data` field; the spec example shows requiredCapabilities, but data is SHOULD.',
-          specReferences: [SEP_2663_REF]
+          specReferences: [SEP_2575_REF, SEP_2663_REF]
         });
       } else if (
         typeof data !== 'object' ||
@@ -213,7 +214,7 @@ downgrade to synchronous execution.`;
           status: 'FAILURE',
           timestamp: new Date().toISOString(),
           errorMessage: `Error data shape does not include requiredCapabilities.extensions["${TASKS_EXTENSION_ID}"]; got data = ${JSON.stringify(data)}`,
-          specReferences: [SEP_2663_REF]
+          specReferences: [SEP_2575_REF, SEP_2663_REF]
         });
       } else {
         checks.push({
@@ -222,7 +223,7 @@ downgrade to synchronous execution.`;
           description: description2,
           status: 'SUCCESS',
           timestamp: new Date().toISOString(),
-          specReferences: [SEP_2663_REF]
+          specReferences: [SEP_2575_REF, SEP_2663_REF]
         });
       }
     }
