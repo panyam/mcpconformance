@@ -56,4 +56,3 @@ them or not. When sent, the notification params MUST carry:
     ];
   }
 }
-
