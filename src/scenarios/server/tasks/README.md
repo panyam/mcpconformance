@@ -9,17 +9,16 @@ The scenarios assert what the spec text says — not what any particular
 implementation does. When the SDK schemas in
 `@modelcontextprotocol/sdk/types.js` lag the spec, scenarios bypass
 the SDK and use raw `fetch` so the SEP-2663 wire fields (`resultType`,
-`taskId`, `inputRequests`, `requestState`, inlined `result`/`error`)
-aren't stripped.
+`taskId`, `inputRequests`, inlined `result`/`error`) aren't stripped.
 
 ## Specs covered
 
-| SEP      | What it adds                                                                                                                                                                                                                                                                                                                                                                                | Where it shows up                   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests/requestState), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds per the 2026-05-07 spec commit aligning duration suffixes) | every scenario                      |
-| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                                                                                            | request-state, mrtr-input, dispatch |
-| SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                                                                                                      | capability                          |
-| SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                                                                                         | headers                             |
+| SEP      | What it adds                                                                                                                                                                                                                                                                                                         | Where it shows up                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds) | every scenario                      |
+| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                     | request-state, mrtr-input, dispatch |
+| SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                               | capability                          |
+| SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                  | headers                             |
 
 ## ClientScenario classes
 
@@ -32,25 +31,25 @@ records. Each row below is one class.
 Sync vs async dispatch, DetailedTask shape on tasks/get, tool errors
 vs protocol errors, cancellation semantics.
 
-| Check                                | What it tests                                                                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tasks-sync-tool-call`               | Sync tool returns `resultType:"complete"`; no top-level `taskId`                                                                                 |
-| `tasks-server-task-creation`         | Task-supporting tool returns flat `CreateTaskResult` (no nested `task` wrapper); MUST NOT carry `result`/`error`/`inputRequests` on the envelope |
-| `tasks-get-during-working`           | `tasks/get` on an active task returns status + metadata                                                                                          |
-| `tasks-get-terminal-inlined-result`  | Completed task `tasks/get` inlines `result.content[]` (no separate `tasks/result`)                                                               |
-| `tasks-tool-error-completed-iserror` | Tool execution errors → `status:"completed"` + `result.isError:true` (NOT `failed`)                                                              |
-| `tasks-protocol-error-failed-shape`  | Protocol errors → `status:"failed"` with inlined `error{code,message}`; no `result`                                                              |
-| `tasks-cancel-empty-ack`             | `tasks/cancel` returns `{resultType:"complete"}`; status settles to cancelled                                                                    |
-| `tasks-cancel-terminal-rejected`     | `tasks/cancel` on a terminal task returns `-32602` (clarified in spec commit `d963ad0`)                                                          |
+| Check                                  | What it tests                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks-sync-tool-call`                 | Sync tool returns `resultType:"complete"`; no top-level `taskId`                                                                                  |
+| `tasks-server-task-creation`           | Task-supporting tool returns flat `CreateTaskResult` (no nested `task` wrapper); MUST NOT carry `result`/`error`/`inputRequests` on the envelope  |
+| `tasks-get-during-working`             | `tasks/get` on an active task returns status + metadata                                                                                           |
+| `tasks-get-terminal-inlined-result`    | Completed task `tasks/get` inlines `result.content[]` (no separate `tasks/result`)                                                                |
+| `tasks-tool-error-completed-iserror`   | Tool execution errors → `status:"completed"` + `result.isError:true` (NOT `failed`)                                                               |
+| `tasks-protocol-error-failed-shape`    | Protocol errors → `status:"failed"` with inlined `error{code,message}`; no `result`                                                               |
+| `tasks-cancel-empty-ack`               | `tasks/cancel` ack carries `resultType:"complete"` and no task-envelope fields; task eventually settles to `cancelled`                            |
+| `tasks-cancel-terminal-idempotent-ack` | `tasks/cancel` on a terminal task returns the same empty-ack as on an active task (idempotent — clients don't have to race observation vs cancel) |
 
 ### `tasks-capability-negotiation` (`capability.ts`)
 
-| Check                                     | What it tests                                                                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tasks-extension-advertised`              | Server advertises `io.modelcontextprotocol/tasks` under `capabilities.extensions`; v1 `capabilities.tasks` slot stays absent               |
-| `tasks-methods-gated-without-extension`   | `tasks/get`, `tasks/update`, `tasks/cancel` return `-32601` for sessions that didn't negotiate the extension                               |
-| `tasks-tools-call-without-extension-sync` | `tools/call` from a non-negotiated session falls through to sync (no `CreateTaskResult`)                                                   |
-| `tasks-per-request-meta-opt-in`           | SEP-2575 — per-request `_meta.io.modelcontextprotocol/clientCapabilities` produces `CreateTaskResult` even without session-level extension |
+| Check                                     | What it tests                                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks-extension-advertised`              | Server advertises `io.modelcontextprotocol/tasks` under `capabilities.extensions`; v1 `capabilities.tasks` slot stays absent                                |
+| `tasks-methods-gated-without-extension`   | `tasks/get`, `tasks/update`, `tasks/cancel` return `-32003` (Missing Required Client Capability, SEP-2575) for sessions that didn't negotiate the extension |
+| `tasks-tools-call-without-extension-sync` | `tools/call` from a non-negotiated session falls through to sync (no `CreateTaskResult`)                                                                    |
+| `tasks-per-request-meta-opt-in`           | SEP-2575 — per-request `_meta.io.modelcontextprotocol/clientCapabilities` produces `CreateTaskResult` even without session-level extension                  |
 
 ### `tasks-wire-fields` (`wire-fields.ts`)
 
@@ -60,13 +59,18 @@ vs protocol errors, cancellation semantics.
 | `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                          |
 | `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result`     |
 
-### `tasks-request-state` (`request-state.ts`)
+### `tasks-request-state-removal` (`request-state.ts`)
 
-| Check                                 | What it tests                                                                                                     |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `tasks-request-state-shape`           | When emitted, `requestState` is a non-empty string (`INFO` if server omits it; emission is optional per SEP-2322) |
-| `tasks-request-state-echo`            | Server accepts `tasks/get` with the previously-emitted `requestState` echoed back                                 |
-| `tasks-request-state-stale-tolerance` | Earlier (stale-but-still-valid) `requestState` MUST still be accepted after a newer one is minted                 |
+SEP-2663 does not define a `requestState` field on the tasks-v2 wire.
+The negative test exists because SEP-2322 places `requestState` on
+`InputRequiredResult` in the same shape slot a fresh implementer might
+also reach for on tasks-v2 `DetailedTask` while reading the two SEPs
+together.
+
+| Check                                  | What it tests                                                       |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| `tasks-create-result-no-request-state` | `CreateTaskResult` MUST NOT carry `requestState`                    |
+| `tasks-get-detailed-no-request-state`  | `tasks/get` response (`DetailedTask`) MUST NOT carry `requestState` |
 
 ### `tasks-mrtr-input` (`mrtr-input.ts`)
 
@@ -111,14 +115,14 @@ vs protocol errors, cancellation semantics.
 
 The fixture server MUST register these tools:
 
-| Tool                 | Behavior                                                                                |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `greet`              | Sync — returns `Hello, {name}!`                                                         |
-| `slow_compute`       | Async — `seconds`-second sleep, returns result; `seconds:0` for immediate path          |
-| `failing_job`        | Async — always returns tool error after ~1s                                             |
-| `protocol_error_job` | Async — panics, surfaces as protocol error                                              |
-| `confirm_delete`     | Async — calls `TaskElicit` (single inputRequest)                                        |
-| `multi_input`        | Async — fans out two `TaskElicit` calls in parallel (used by partial-fulfillment check) |
+| Tool                 | Behavior                                                                                                                                                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `greet`              | Sync — returns `Hello, {name}!`                                                                                                                                                                                                                       |
+| `slow_compute`       | Async — `seconds`-second sleep, returns result; `seconds:0` for immediate path. MUST settle to `cancelled` (not `completed` / `failed`) when `tasks/cancel` arrives while running, so the lifecycle cancel check has a deterministic terminal status. |
+| `failing_job`        | Async — always returns tool error after ~1s                                                                                                                                                                                                           |
+| `protocol_error_job` | Async — panics, surfaces as protocol error                                                                                                                                                                                                            |
+| `confirm_delete`     | Async — calls `TaskElicit` (single inputRequest)                                                                                                                                                                                                      |
+| `multi_input`        | Async — fans out two `TaskElicit` calls in parallel (used by partial-fulfillment check)                                                                                                                                                               |
 
 The fixture can be implemented in any language; one example reference
 implementation lives at
@@ -154,9 +158,9 @@ Where the spec is silent or ambiguous, this suite picks the louder /
 safer option (typically `-32602` over silent ack) so a misbehaving
 server fails loudly rather than appearing well-formed. Today:
 
-1. **Invalid `requestState`** — silent ack vs `-32602`. Suite asserts `-32602` (a server that silently accepts a forged token is a security hazard).
-2. **SEP-2575 per-request capabilities envelope shape** — covered by `tasks-per-request-meta-opt-in`; the suite asserts only the observable behavior (`CreateTaskResult` produced) so the inner shape can evolve without churn.
-3. **`tasks/update` / `tasks/cancel` for unknown taskId** — silent ack vs `-32602`. The read paths (`tasks/get` and `tasks/cancel` on terminal task) assert `-32602`; the write paths' upstream wording is too soft to assert against here.
+1. **SEP-2575 per-request capabilities envelope shape** — covered by `tasks-per-request-meta-opt-in`; the suite asserts only the observable behavior (`CreateTaskResult` produced) so the inner shape can evolve without churn.
+2. **`tasks/update` / `tasks/cancel` for unknown taskId** — silent ack vs `-32602`. The read path (`tasks/get`) asserts `-32602`; the write paths' upstream wording is too soft to assert against here.
+3. **`-32003` for gated tasks methods without negotiation** — the spec doesn't currently mandate this code for `tasks/get` / `tasks/update` / `tasks/cancel` when the client didn't negotiate the extension, but the suite asserts it to follow the SEP-2575 §"Missing Required Capabilities" pattern that already governs `required` tools (and that `subscriptions/listen` for tasks is expected to use).
 
 ## Wire-format diff vs MCP Tasks v1 (spec 2025-11-25)
 
@@ -167,7 +171,7 @@ server fails loudly rather than appearing well-formed. Today:
 | Task creation              | Client sends `task` hint param | Server decides unilaterally                                                                    |
 | `resultType` discriminator | absent                         | `"task"` (CreateTaskResult) / `"complete"` (everything else) / `"incomplete"` (MRTR ephemeral) |
 | `CreateTaskResult` shape   | `{task: {...}}` (nested)       | flat: `{resultType, taskId, status, ttlMs, ...}` (no nested wrapper)                           |
-| `tasks/get` response       | flat `TaskInfo` only           | `DetailedTask` with inlined `result`/`error`/`inputRequests`/`requestState`                    |
+| `tasks/get` response       | flat `TaskInfo` only           | `DetailedTask` with inlined `result`/`error`/`inputRequests`                                   |
 | `tasks/update`             | n/a                            | new — MRTR resume path, returns `{resultType:"complete"}` ack                                  |
 | `tasks/cancel` response    | rich task envelope             | `{resultType:"complete"}` ack (no task state)                                                  |
 | `tasks/result`             | separate blocking method       | **removed** (result inlined on `tasks/get`)                                                    |
@@ -182,12 +186,12 @@ server fails loudly rather than appearing well-formed. Today:
 
 ### Raw fetch escape hatch
 
-The MCP TS SDK ships with strict Zod schemas that strip SEP-2663 /
-SEP-2322 wire fields from responses (`resultType`, `taskId`,
-`inputRequests`, `requestState`, inlined result/error). Scenarios that
-exercise those fields use the raw-fetch helpers in `helpers.ts` rather
-than the SDK client. When the SDK gains schemas for the SEP-2663
-shapes, those call sites switch back to
+The MCP TS SDK ships with strict Zod schemas that strip SEP-2663
+wire fields from responses (`resultType`, `taskId`, `inputRequests`,
+inlined result/error) and the SEP-2322 ephemeral MRTR `requestState`.
+Scenarios that exercise those fields use the raw-fetch helpers in
+`helpers.ts` rather than the SDK client. When the SDK gains schemas
+for the SEP-2663 shapes, those call sites switch back to
 `client.request(..., AnyResult)` and the helpers shrink (or disappear).
 
 ### Severity follows the spec keyword

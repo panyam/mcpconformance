@@ -134,12 +134,16 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
       });
     }
 
-    // Check 2: tasks/* methods rejected without extension negotiation.
+    // Check 2: tasks/* methods rejected with -32003 (Missing Required
+    // Client Capability) when the client did not negotiate the tasks
+    // extension. Follows the SEP-2575 §"Missing Required Capabilities"
+    // pattern — same code path as the required-task-error scenario and
+    // (when implemented) subscriptions/listen for tasks.
     {
       const id = 'tasks-methods-gated-without-extension';
       const name = 'TasksMethodsGatedWithoutExtension';
       const description =
-        'tasks/get, tasks/update, tasks/cancel return -32601 when extension was not negotiated';
+        'tasks/get, tasks/update, tasks/cancel return -32003 when the client did not negotiate the tasks extension (SEP-2575 Missing Required Capabilities)';
       const cases: Array<{ method: string; params: any }> = [
         { method: 'tasks/get', params: { taskId: 'gate-test' } },
         {
@@ -157,9 +161,9 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
           );
           errs.push(`${tc.method} MUST reject (it returned a result)`);
         } catch (e: any) {
-          if (e.code !== -32601) {
+          if (e.code !== -32003) {
             errs.push(
-              `${tc.method} MUST return -32601; got ${e.code ?? '<missing>'}`
+              `${tc.method} MUST return -32003; got ${e.code ?? '<missing>'}`
             );
           }
         }
@@ -171,7 +175,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
         status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
         timestamp: new Date().toISOString(),
         errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-        specReferences: [SEP_2663_REF]
+        specReferences: [SEP_2575_REF, SEP_2663_REF]
       });
     }
 
