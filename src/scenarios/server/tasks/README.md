@@ -9,14 +9,13 @@ The scenarios assert what the spec text says — not what any particular
 implementation does. When the SDK schemas in
 `@modelcontextprotocol/sdk/types.js` lag the spec, scenarios bypass
 the SDK and use raw `fetch` so the SEP-2663 wire fields (`resultType`,
-`taskId`, `inputRequests`, `requestState`, inlined `result`/`error`)
-aren't stripped.
+`taskId`, `inputRequests`, inlined `result`/`error`) aren't stripped.
 
 ## Specs covered
 
 | SEP      | What it adds                                                                                                                                                                                                                                                                                                                                                                                | Where it shows up                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests/requestState), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds per the 2026-05-07 spec commit aligning duration suffixes) | every scenario                      |
+| SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, flat `CreateTaskResult` (`Result & Task`), `DetailedTask` on `tasks/get` (with inlined result/error/inputRequests), `tasks/update` for MRTR resume, ack-only `tasks/cancel`, wire-field renames (`ttlMs`, `pollIntervalMs`, both integer milliseconds)                                                                       | every scenario                      |
 | SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` keyed maps, `requestState`, `resultType` discriminator (`"task"`/`"complete"`/`"incomplete"`)                                                                                                                                                                                                                                            | request-state, mrtr-input, dispatch |
 | SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities`                                                                                                                                                                                                                                                                                                      | capability                          |
 | SEP-2243 | Server tolerates `Mcp-Method` / `Mcp-Name` request headers as informational routing metadata; body is authoritative                                                                                                                                                                                                                                                                         | headers                             |
@@ -167,7 +166,7 @@ server fails loudly rather than appearing well-formed. Today:
 | Task creation              | Client sends `task` hint param | Server decides unilaterally                                                                    |
 | `resultType` discriminator | absent                         | `"task"` (CreateTaskResult) / `"complete"` (everything else) / `"incomplete"` (MRTR ephemeral) |
 | `CreateTaskResult` shape   | `{task: {...}}` (nested)       | flat: `{resultType, taskId, status, ttlMs, ...}` (no nested wrapper)                           |
-| `tasks/get` response       | flat `TaskInfo` only           | `DetailedTask` with inlined `result`/`error`/`inputRequests`/`requestState`                    |
+| `tasks/get` response       | flat `TaskInfo` only           | `DetailedTask` with inlined `result`/`error`/`inputRequests`                                   |
 | `tasks/update`             | n/a                            | new — MRTR resume path, returns `{resultType:"complete"}` ack                                  |
 | `tasks/cancel` response    | rich task envelope             | `{resultType:"complete"}` ack (no task state)                                                  |
 | `tasks/result`             | separate blocking method       | **removed** (result inlined on `tasks/get`)                                                    |
@@ -182,12 +181,12 @@ server fails loudly rather than appearing well-formed. Today:
 
 ### Raw fetch escape hatch
 
-The MCP TS SDK ships with strict Zod schemas that strip SEP-2663 /
-SEP-2322 wire fields from responses (`resultType`, `taskId`,
-`inputRequests`, `requestState`, inlined result/error). Scenarios that
-exercise those fields use the raw-fetch helpers in `helpers.ts` rather
-than the SDK client. When the SDK gains schemas for the SEP-2663
-shapes, those call sites switch back to
+The MCP TS SDK ships with strict Zod schemas that strip SEP-2663
+wire fields from responses (`resultType`, `taskId`, `inputRequests`,
+inlined result/error) and the SEP-2322 ephemeral MRTR `requestState`.
+Scenarios that exercise those fields use the raw-fetch helpers in
+`helpers.ts` rather than the SDK client. When the SDK gains schemas
+for the SEP-2663 shapes, those call sites switch back to
 `client.request(..., AnyResult)` and the helpers shrink (or disappear).
 
 ### Severity follows the spec keyword
