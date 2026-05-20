@@ -47,7 +47,7 @@ vs protocol errors, cancellation semantics.
 | Check                                     | What it tests                                                                                                                              |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tasks-extension-advertised`              | Server advertises `io.modelcontextprotocol/tasks` under `capabilities.extensions`; v1 `capabilities.tasks` slot stays absent               |
-| `tasks-methods-gated-without-extension`   | `tasks/get`, `tasks/update`, `tasks/cancel` return `-32601` for sessions that didn't negotiate the extension                               |
+| `tasks-methods-gated-without-extension`   | `tasks/get`, `tasks/update`, `tasks/cancel` return `-32003` (Missing Required Client Capability, SEP-2575) for sessions that didn't negotiate the extension |
 | `tasks-tools-call-without-extension-sync` | `tools/call` from a non-negotiated session falls through to sync (no `CreateTaskResult`)                                                   |
 | `tasks-per-request-meta-opt-in`           | SEP-2575 — per-request `_meta.io.modelcontextprotocol/clientCapabilities` produces `CreateTaskResult` even without session-level extension |
 
@@ -158,9 +158,9 @@ Where the spec is silent or ambiguous, this suite picks the louder /
 safer option (typically `-32602` over silent ack) so a misbehaving
 server fails loudly rather than appearing well-formed. Today:
 
-1. **Invalid `requestState`** — silent ack vs `-32602`. Suite asserts `-32602` (a server that silently accepts a forged token is a security hazard).
-2. **SEP-2575 per-request capabilities envelope shape** — covered by `tasks-per-request-meta-opt-in`; the suite asserts only the observable behavior (`CreateTaskResult` produced) so the inner shape can evolve without churn.
-3. **`tasks/update` / `tasks/cancel` for unknown taskId** — silent ack vs `-32602`. The read paths (`tasks/get` and `tasks/cancel` on terminal task) assert `-32602`; the write paths' upstream wording is too soft to assert against here.
+1. **SEP-2575 per-request capabilities envelope shape** — covered by `tasks-per-request-meta-opt-in`; the suite asserts only the observable behavior (`CreateTaskResult` produced) so the inner shape can evolve without churn.
+2. **`tasks/update` / `tasks/cancel` for unknown taskId** — silent ack vs `-32602`. The read path (`tasks/get`) asserts `-32602`; the write paths' upstream wording is too soft to assert against here.
+3. **`-32003` for gated tasks methods without negotiation** — the spec doesn't currently mandate this code for `tasks/get` / `tasks/update` / `tasks/cancel` when the client didn't negotiate the extension, but the suite asserts it to follow the SEP-2575 §"Missing Required Capabilities" pattern that already governs `required` tools (and that `subscriptions/listen` for tasks is expected to use).
 
 ## Wire-format diff vs MCP Tasks v1 (spec 2025-11-25)
 
