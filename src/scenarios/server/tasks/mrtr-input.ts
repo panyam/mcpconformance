@@ -227,8 +227,7 @@ export class TasksMRTRInputScenario implements ClientScenario {
               method: 'tasks/update',
               params: {
                 taskId,
-                inputResponses: responses,
-                requestState: inputTask.requestState
+                inputResponses: responses
               }
             },
             AnyResult
