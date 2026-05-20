@@ -499,12 +499,16 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
       }
     }
 
-    // Check 8: tasks/cancel on a terminal task MUST return -32602.
+    // Check 8: tasks/cancel on a terminal task is idempotent — returns
+    // the same {resultType:"complete"} empty-ack as on an active task,
+    // rather than -32602. Required so clients don't have to handle the
+    // race where a task terminates between observation and the cancel
+    // request.
     {
-      const id = 'tasks-cancel-terminal-rejected';
-      const name = 'TasksCancelTerminalRejected';
+      const id = 'tasks-cancel-terminal-idempotent-ack';
+      const name = 'TasksCancelTerminalIdempotentAck';
       const description =
-        'tasks/cancel on a terminal task returns -32602 (per spec commit d963ad0)';
+        'tasks/cancel on a terminal task returns the same empty-ack as on an active task (idempotent)';
       try {
         const created = (await client.request(
           {
@@ -529,24 +533,22 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
           });
         } else {
           await waitForTerminal(client, completedTaskId);
-          // Now cancel — must throw -32602.
-          let thrown: any;
-          try {
-            await client.request(
-              { method: 'tasks/cancel', params: { taskId: completedTaskId } },
-              AnyResult
-            );
-          } catch (e) {
-            thrown = e;
-          }
+          const ack = (await client.request(
+            { method: 'tasks/cancel', params: { taskId: completedTaskId } },
+            AnyResult
+          )) as any;
           const errs: string[] = [];
-          if (!thrown) {
+          if (ack?.resultType !== 'complete') {
             errs.push(
-              'tasks/cancel on terminal task MUST return JSON-RPC error'
+              `idempotent cancel ack MUST carry resultType:"complete"; got resultType=${ack?.resultType}`
             );
-          } else if (thrown.code !== -32602) {
+          }
+          const ackOffenders = (
+            ['taskId', 'status', 'result', 'error', 'inputRequests'] as const
+          ).filter((f) => f in ack);
+          if (ackOffenders.length > 0) {
             errs.push(
-              `expected error code -32602; got ${thrown.code ?? '<missing>'}`
+              `idempotent cancel ack MUST NOT carry task-envelope fields; got: ${ackOffenders.join(', ')}`
             );
           }
           checks.push({
@@ -557,7 +559,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
             timestamp: new Date().toISOString(),
             errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
             specReferences: [SEP_2663_REF],
-            details: { observedCode: thrown?.code }
+            details: { cancelAck: ack }
           });
         }
       } catch (error) {

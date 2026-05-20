@@ -40,8 +40,8 @@ vs protocol errors, cancellation semantics.
 | `tasks-get-terminal-inlined-result`  | Completed task `tasks/get` inlines `result.content[]` (no separate `tasks/result`)                                                               |
 | `tasks-tool-error-completed-iserror` | Tool execution errors → `status:"completed"` + `result.isError:true` (NOT `failed`)                                                              |
 | `tasks-protocol-error-failed-shape`  | Protocol errors → `status:"failed"` with inlined `error{code,message}`; no `result`                                                              |
-| `tasks-cancel-empty-ack`             | `tasks/cancel` returns `{resultType:"complete"}`; status settles to cancelled                                                                    |
-| `tasks-cancel-terminal-rejected`     | `tasks/cancel` on a terminal task returns `-32602` (clarified in spec commit `d963ad0`)                                                          |
+| `tasks-cancel-empty-ack`               | `tasks/cancel` ack carries `resultType:"complete"` and no task-envelope fields; task eventually settles to `cancelled`                            |
+| `tasks-cancel-terminal-idempotent-ack` | `tasks/cancel` on a terminal task returns the same empty-ack as on an active task (idempotent — clients don't have to race observation vs cancel) |
 
 ### `tasks-capability-negotiation` (`capability.ts`)
 
