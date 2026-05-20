@@ -474,14 +474,13 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
               `cancel ack MUST NOT carry task-envelope fields; got: ${ackOffenders.join(', ')}`
             );
           }
-          // Status settles to cancelled — observe via tasks/get.
-          const after = (await client.request(
-            { method: 'tasks/get', params: { taskId: cancelTaskId } },
-            AnyResult
-          )) as any;
+          // Cancellation is eventually-consistent — poll to terminal
+          // before asserting the cancelled status. The slow_compute
+          // fixture contract requires settling to `cancelled`.
+          const after = await waitForTerminal(client, cancelTaskId);
           if (after.status !== 'cancelled') {
             errs.push(
-              `tasks/get after cancel MUST report cancelled; got ${after.status}`
+              `terminal status after cancel MUST be cancelled; got ${after.status}`
             );
           }
           checks.push({

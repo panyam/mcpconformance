@@ -114,7 +114,7 @@ The fixture server MUST register these tools:
 | Tool                 | Behavior                                                                                |
 | -------------------- | --------------------------------------------------------------------------------------- |
 | `greet`              | Sync — returns `Hello, {name}!`                                                         |
-| `slow_compute`       | Async — `seconds`-second sleep, returns result; `seconds:0` for immediate path          |
+| `slow_compute`       | Async — `seconds`-second sleep, returns result; `seconds:0` for immediate path. MUST settle to `cancelled` (not `completed` / `failed`) when `tasks/cancel` arrives while running, so the lifecycle cancel check has a deterministic terminal status. |
 | `failing_job`        | Async — always returns tool error after ~1s                                             |
 | `protocol_error_job` | Async — panics, surfaces as protocol error                                              |
 | `confirm_delete`     | Async — calls `TaskElicit` (single inputRequest)                                        |
