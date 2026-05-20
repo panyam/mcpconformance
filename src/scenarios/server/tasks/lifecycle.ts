@@ -459,12 +459,19 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
             AnyResult
           )) as any;
           const errs: string[] = [];
-          // Ack carries only the SEP-2322 discriminator — no task envelope.
-          if (
-            JSON.stringify(ack) !== JSON.stringify({ resultType: 'complete' })
-          ) {
+          if (ack?.resultType !== 'complete') {
             errs.push(
-              `cancel ack MUST be {resultType:"complete"}; got ${JSON.stringify(ack)}`
+              `cancel ack MUST carry resultType:"complete"; got resultType=${ack?.resultType}`
+            );
+          }
+          // Task-envelope fields MUST NOT appear on the ack; _meta and
+          // other result-shape metadata are permitted.
+          const ackOffenders = (
+            ['taskId', 'status', 'result', 'error', 'inputRequests'] as const
+          ).filter((f) => f in ack);
+          if (ackOffenders.length > 0) {
+            errs.push(
+              `cancel ack MUST NOT carry task-envelope fields; got: ${ackOffenders.join(', ')}`
             );
           }
           // Status settles to cancelled — observe via tasks/get.

@@ -232,11 +232,17 @@ export class TasksMRTRInputScenario implements ClientScenario {
             },
             AnyResult
           )) as any;
-          if (
-            JSON.stringify(ack) !== JSON.stringify({ resultType: 'complete' })
-          ) {
+          if (ack?.resultType !== 'complete') {
             errs.push(
-              `tasks/update ack MUST be {resultType:"complete"}; got ${JSON.stringify(ack)}`
+              `tasks/update ack MUST carry resultType:"complete"; got resultType=${ack?.resultType}`
+            );
+          }
+          const updateAckOffenders = (
+            ['taskId', 'status', 'result', 'error', 'inputRequests'] as const
+          ).filter((f) => f in ack);
+          if (updateAckOffenders.length > 0) {
+            errs.push(
+              `tasks/update ack MUST NOT carry task-envelope fields; got: ${updateAckOffenders.join(', ')}`
             );
           }
           const terminal = await waitForTerminal(client, taskId);
