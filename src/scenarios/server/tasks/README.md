@@ -59,13 +59,18 @@ vs protocol errors, cancellation semantics.
 | `tasks-no-early-ttl-expiry`                    | Task remains accessible via `tasks/get` for the duration of its `ttlMs`                          |
 | `tasks-no-related-task-meta-on-inlined-result` | v1 `io.modelcontextprotocol/related-task` `_meta` key absent on tasks/get's inlined `result`     |
 
-### `tasks-request-state` (`request-state.ts`)
+### `tasks-request-state-removal` (`request-state.ts`)
 
-| Check                                 | What it tests                                                                                                     |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `tasks-request-state-shape`           | When emitted, `requestState` is a non-empty string (`INFO` if server omits it; emission is optional per SEP-2322) |
-| `tasks-request-state-echo`            | Server accepts `tasks/get` with the previously-emitted `requestState` echoed back                                 |
-| `tasks-request-state-stale-tolerance` | Earlier (stale-but-still-valid) `requestState` MUST still be accepted after a newer one is minted                 |
+SEP-2663 does not define a `requestState` field on the tasks-v2 wire.
+The negative test exists because SEP-2322 places `requestState` on
+`InputRequiredResult` in the same shape slot a fresh implementer might
+also reach for on tasks-v2 `DetailedTask` while reading the two SEPs
+together.
+
+| Check                                    | What it tests                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `tasks-create-result-no-request-state`   | `CreateTaskResult` MUST NOT carry `requestState`                         |
+| `tasks-get-detailed-no-request-state`    | `tasks/get` response (`DetailedTask`) MUST NOT carry `requestState`      |
 
 ### `tasks-mrtr-input` (`mrtr-input.ts`)
 
