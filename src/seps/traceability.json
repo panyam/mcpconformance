@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "docs": "https://github.com/modelcontextprotocol/conformance/blob/main/AGENTS.md#traceability-manifest",
-  "source": "typescript-sdk@4e153aef0538",
+  "source": "typescript-sdk@22595b96",
   "seps": {
     "837": {
       "yaml": "src/seps/sep-837.yaml",
@@ -381,7 +381,7 @@
       "requirements": [
         {
           "check": "sep-2575-client-populates-meta",
-          "status": "untested",
+          "status": "tested",
           "text": "Every client request MUST include the following io.modelcontextprotocol/* fields in _meta: protocolVersion, clientInfo, clientCapabilities.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/index#meta"
         },
@@ -399,19 +399,9 @@
         },
         {
           "check": "sep-2575-server-tags-subscription-id",
-          "status": "untested",
+          "status": "tested",
           "text": "On notifications delivered via a subscriptions/listen stream, the server MUST include io.modelcontextprotocol/subscriptionId in _meta so the client can correlate the notification with the originating subscription request.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/index#meta"
-        },
-        {
-          "check": "sep-2575-server-stateless-no-prior-context",
-          "status": "untested",
-          "text": "A server MUST NOT treat connection or process identity as a proxy for conversation or session continuity. / Servers MUST NOT rely on prior requests over the same connection to establish context (e.g., capabilities, protocol version, client identity)."
-        },
-        {
-          "check": "sep-2575-server-stateless-no-connection-reuse-required",
-          "status": "untested",
-          "text": "Servers MUST NOT require that a client reuse the same connection to perform related operations."
         },
         {
           "check": "sep-2575-server-unsupported-version-error",
@@ -421,7 +411,7 @@
         },
         {
           "check": "sep-2575-client-retry-supported-version",
-          "status": "untested",
+          "status": "tested",
           "text": "The client SHOULD select a mutually supported version from the supported list and retry the request, or surface an error to the user if no compatible version exists.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/lifecycle#protocol-version-negotiation"
         },
@@ -433,31 +423,19 @@
         },
         {
           "check": "sep-2575-http-server-no-independent-requests-on-stream",
-          "status": "untested",
+          "status": "tested",
           "text": "The server MUST NOT send independent JSON-RPC requests on this stream. Server-to-client interactions are embedded as input requests inside an IncompleteResult.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/transports#receiving-messages-1"
         },
         {
-          "check": "sep-2575-http-server-disconnect-is-cancel",
-          "status": "untested",
-          "text": "Closing the SSE response stream MUST be treated by the server as cancellation of that request.",
-          "url": "https://modelcontextprotocol.io/specification/draft/basic/transports#cancellation-1"
-        },
-        {
-          "check": "sep-2575-http-server-stops-on-cancel",
-          "status": "untested",
-          "text": "The server SHOULD stop work on the cancelled request as soon as practical and MUST NOT send any further messages for it [HTTP].",
-          "url": "https://modelcontextprotocol.io/specification/draft/basic/transports#cancellation-1"
-        },
-        {
           "check": "sep-2575-http-client-sends-version-header",
-          "status": "untested",
+          "status": "tested",
           "text": "Every POST request to the MCP endpoint MUST include an MCP-Protocol-Version header.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/transports#protocol-version-header"
         },
         {
           "check": "sep-2575-http-version-header-matches-meta",
-          "status": "untested",
+          "status": "tested",
           "text": "The header value MUST match the io.modelcontextprotocol/protocolVersion field carried in the request body _meta.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/transports#protocol-version-header"
         },
@@ -481,31 +459,31 @@
         },
         {
           "check": "sep-2575-server-honors-notification-filter",
-          "status": "untested",
+          "status": "tested",
           "text": "The server MUST NOT send notification types the client has not explicitly requested.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/utilities/subscriptions#opening-a-stream"
         },
         {
           "check": "sep-2575-server-sends-subscription-ack",
-          "status": "untested",
+          "status": "tested",
           "text": "The server MUST send notifications/subscriptions/acknowledged as the first message on the stream.",
           "url": "https://modelcontextprotocol.io/specification/draft/basic/utilities/subscriptions#acknowledgment"
         },
         {
           "check": "sep-2575-client-declares-elicitation-capability",
-          "status": "untested",
+          "status": "tested",
           "text": "Clients that support elicitation MUST declare the elicitation capability in _meta.io.modelcontextprotocol/clientCapabilities on each request.",
           "url": "https://modelcontextprotocol.io/specification/draft/client/elicitation#capabilities"
         },
         {
           "check": "sep-2575-client-declares-roots-capability",
-          "status": "untested",
+          "status": "tested",
           "text": "Clients that support roots MUST declare the roots capability in _meta.io.modelcontextprotocol/clientCapabilities on each request.",
           "url": "https://modelcontextprotocol.io/specification/draft/client/roots#capabilities"
         },
         {
           "check": "sep-2575-client-declares-sampling-capability",
-          "status": "untested",
+          "status": "tested",
           "text": "Clients that support sampling MUST declare the sampling capability in _meta.io.modelcontextprotocol/clientCapabilities on each request.",
           "url": "https://modelcontextprotocol.io/specification/draft/client/sampling#capabilities"
         },
@@ -517,24 +495,40 @@
         },
         {
           "check": "sep-2575-server-sends-prompts-list-changed-on-subscription",
-          "status": "untested",
+          "status": "tested",
           "text": "[A server with the listChanged] capability SHOULD send a notification to clients that have opened a subscriptions/listen stream with promptsListChanged: true.",
           "url": "https://modelcontextprotocol.io/specification/draft/server/prompts#list-changed-notification"
         },
         {
           "check": "sep-2575-server-sends-tools-list-changed-on-subscription",
-          "status": "untested",
+          "status": "tested",
           "text": "[A server with the listChanged] capability SHOULD send a notification to clients that have opened a subscriptions/listen stream with toolsListChanged: true.",
           "url": "https://modelcontextprotocol.io/specification/draft/server/tools#list-changed-notification"
         },
         {
           "check": "sep-2575-server-no-log-without-loglevel",
-          "status": "untested",
+          "status": "tested",
           "text": "The server MUST NOT emit notifications/message for a request that does not include [io.modelcontextprotocol/logLevel in _meta].",
           "url": "https://modelcontextprotocol.io/specification/draft/server/utilities/logging#per-request-log-level"
         }
       ],
       "excluded": [
+        {
+          "text": "A server MUST NOT treat connection or process identity as a proxy for conversation or session continuity. / Servers MUST NOT rely on prior requests over the same connection to establish context (e.g., capabilities, protocol version, client identity).",
+          "reason": "internal server state, not directly wire-observable; the observable consequence (rejecting requests with incomplete _meta rather than falling back to remembered state) is covered by sep-2575-request-meta-invalid-* — see https://github.com/modelcontextprotocol/conformance/issues/296"
+        },
+        {
+          "text": "Servers MUST NOT require that a client reuse the same connection to perform related operations.",
+          "reason": "not observable from a black-box harness; every harness request already arrives on an independent connection — see https://github.com/modelcontextprotocol/conformance/issues/296"
+        },
+        {
+          "text": "Closing the SSE response stream MUST be treated by the server as cancellation of that request.",
+          "reason": "\"treated as cancellation\" is internal server state; once the stream is closed there is no channel left on which to observe the effect — see https://github.com/modelcontextprotocol/conformance/issues/296"
+        },
+        {
+          "text": "The server SHOULD stop work on the cancelled request as soon as practical and MUST NOT send any further messages for it [HTTP].",
+          "reason": "\"stop work as soon as practical\" is unobservable from a black-box harness, and \"no further messages\" cannot be verified once the response stream is closed — see https://github.com/modelcontextprotocol/conformance/issues/296"
+        },
         {
           "text": "State that needs to span multiple requests (e.g., long-running tasks, application-level handles) MUST be referenced by an explicit identifier the client passes on each request.",
           "reason": "architectural guidance, observable only via subscriptionId/task-id rows already listed"
@@ -587,9 +581,9 @@
         "sep-2575-request-meta-invalid-missing-protocol-version"
       ],
       "summary": {
-        "tested": 8,
-        "untested": 18,
-        "excluded": 9,
+        "tested": 22,
+        "untested": 0,
+        "excluded": 13,
         "untracked": 11,
         "unkeyed": 0
       }
