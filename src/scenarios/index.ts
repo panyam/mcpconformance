@@ -14,6 +14,7 @@ import { ToolsCallScenario } from './client/tools_call';
 import { ElicitationClientDefaultsScenario } from './client/elicitation-defaults';
 import { SSERetryScenario } from './client/sse-retry';
 import { RequestMetadataScenario } from './client/request-metadata';
+import { MRTRClientScenario } from './client/mrtr-client';
 
 // Import all new server test scenarios
 import { ServerInitializeScenario } from './server/lifecycle';
@@ -65,6 +66,25 @@ import {
 } from './server/prompts';
 
 import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
+import { CachingScenario } from './server/caching';
+
+// InputRequiredResult scenarios from (SEP-2322)
+import {
+  InputRequiredResultBasicElicitationScenario,
+  InputRequiredResultBasicSamplingScenario,
+  InputRequiredResultBasicListRootsScenario,
+  InputRequiredResultRequestStateScenario,
+  InputRequiredResultMultipleInputRequestsScenario,
+  InputRequiredResultMultiRoundScenario,
+  InputRequiredResultMissingInputResponseScenario,
+  InputRequiredResultNonToolRequestScenario,
+  InputRequiredResultResultTypeScenario,
+  InputRequiredResultUnsupportedMethodsScenario,
+  InputRequiredResultTamperedStateScenario,
+  InputRequiredResultCapabilityCheckScenario,
+  InputRequiredResultIgnoreExtraParamsScenario,
+  InputRequiredResultValidateInputScenario
+} from './server/input-required-result';
 
 import { TasksLifecycleScenario } from './server/tasks/lifecycle';
 import { TasksCapabilityNegotiationScenario } from './server/tasks/capability';
@@ -195,6 +215,8 @@ const allClientScenariosList: ClientScenario[] = [
   // Security scenarios
   new DNSRebindingProtectionScenario(),
 
+  // Caching scenarios (SEP-2549)
+  new CachingScenario(),
   // HTTP Standardization scenarios (SEP-2243)
   new HttpHeaderValidationScenario(),
   new HttpCustomHeaderServerValidationScenario(),
@@ -217,7 +239,23 @@ const allClientScenariosList: ClientScenario[] = [
   // SEP-2322 MRTR (ephemeral InputRequiredResult flow). Targets a
   // dedicated MRTR fixture — out of scope for the default
   // everything-server until SEP-2322 lands there.
-  new MrtrEphemeralFlowScenario()
+  new MrtrEphemeralFlowScenario(),
+
+  // InputRequiredResult scenarios (SEP-2322)
+  new InputRequiredResultBasicElicitationScenario(),
+  new InputRequiredResultBasicSamplingScenario(),
+  new InputRequiredResultBasicListRootsScenario(),
+  new InputRequiredResultRequestStateScenario(),
+  new InputRequiredResultMultipleInputRequestsScenario(),
+  new InputRequiredResultMultiRoundScenario(),
+  new InputRequiredResultMissingInputResponseScenario(),
+  new InputRequiredResultNonToolRequestScenario(),
+  new InputRequiredResultResultTypeScenario(),
+  new InputRequiredResultUnsupportedMethodsScenario(),
+  new InputRequiredResultTamperedStateScenario(),
+  new InputRequiredResultCapabilityCheckScenario(),
+  new InputRequiredResultIgnoreExtraParamsScenario(),
+  new InputRequiredResultValidateInputScenario()
 ];
 
 // Active client scenarios (excludes pending)
@@ -262,6 +300,9 @@ const scenariosList: Scenario[] = [
   ...backcompatScenariosList,
   ...draftScenariosList,
   ...extensionScenariosList,
+
+  // MRTR client conformance (SEP-2322)
+  new MRTRClientScenario(),
 
   // HTTP Standardization scenarios (SEP-2243)
   new HttpStandardHeadersScenario(),
