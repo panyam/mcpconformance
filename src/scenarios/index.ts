@@ -14,6 +14,7 @@ import { ToolsCallScenario } from './client/tools_call';
 import { ElicitationClientDefaultsScenario } from './client/elicitation-defaults';
 import { SSERetryScenario } from './client/sse-retry';
 import { RequestMetadataScenario } from './client/request-metadata';
+import { MRTRClientScenario } from './client/mrtr-client';
 
 // Import all new server test scenarios
 import { ServerInitializeScenario } from './server/lifecycle';
@@ -66,6 +67,24 @@ import {
 
 import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
 import { CachingScenario } from './server/caching';
+
+// InputRequiredResult scenarios from (SEP-2322)
+import {
+  InputRequiredResultBasicElicitationScenario,
+  InputRequiredResultBasicSamplingScenario,
+  InputRequiredResultBasicListRootsScenario,
+  InputRequiredResultRequestStateScenario,
+  InputRequiredResultMultipleInputRequestsScenario,
+  InputRequiredResultMultiRoundScenario,
+  InputRequiredResultMissingInputResponseScenario,
+  InputRequiredResultNonToolRequestScenario,
+  InputRequiredResultResultTypeScenario,
+  InputRequiredResultUnsupportedMethodsScenario,
+  InputRequiredResultTamperedStateScenario,
+  InputRequiredResultCapabilityCheckScenario,
+  InputRequiredResultIgnoreExtraParamsScenario,
+  InputRequiredResultValidateInputScenario
+} from './server/input-required-result';
 
 import {
   HttpHeaderValidationScenario,
@@ -167,7 +186,23 @@ const allClientScenariosList: ClientScenario[] = [
   new CachingScenario(),
   // HTTP Standardization scenarios (SEP-2243)
   new HttpHeaderValidationScenario(),
-  new HttpCustomHeaderServerValidationScenario()
+  new HttpCustomHeaderServerValidationScenario(),
+
+  // InputRequiredResult scenarios (SEP-2322)
+  new InputRequiredResultBasicElicitationScenario(),
+  new InputRequiredResultBasicSamplingScenario(),
+  new InputRequiredResultBasicListRootsScenario(),
+  new InputRequiredResultRequestStateScenario(),
+  new InputRequiredResultMultipleInputRequestsScenario(),
+  new InputRequiredResultMultiRoundScenario(),
+  new InputRequiredResultMissingInputResponseScenario(),
+  new InputRequiredResultNonToolRequestScenario(),
+  new InputRequiredResultResultTypeScenario(),
+  new InputRequiredResultUnsupportedMethodsScenario(),
+  new InputRequiredResultTamperedStateScenario(),
+  new InputRequiredResultCapabilityCheckScenario(),
+  new InputRequiredResultIgnoreExtraParamsScenario(),
+  new InputRequiredResultValidateInputScenario()
 ];
 
 // Active client scenarios (excludes pending)
@@ -212,6 +247,9 @@ const scenariosList: Scenario[] = [
   ...backcompatScenariosList,
   ...draftScenariosList,
   ...extensionScenariosList,
+
+  // MRTR client conformance (SEP-2322)
+  new MRTRClientScenario(),
 
   // HTTP Standardization scenarios (SEP-2243)
   new HttpStandardHeadersScenario(),
