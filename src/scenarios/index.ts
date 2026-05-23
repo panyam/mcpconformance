@@ -116,6 +116,7 @@ import {
   HttpCustomHeadersScenario,
   HttpInvalidToolHeadersScenario
 } from './client/http-custom-headers';
+import { JsonSchemaRefDerefScenario } from './client/json-schema-ref-deref';
 
 // Pending client scenarios (not yet fully tested/implemented)
 const pendingClientScenariosList: ClientScenario[] = [
@@ -307,7 +308,10 @@ const scenariosList: Scenario[] = [
   // HTTP Standardization scenarios (SEP-2243)
   new HttpStandardHeadersScenario(),
   new HttpCustomHeadersScenario(),
-  new HttpInvalidToolHeadersScenario()
+  new HttpInvalidToolHeadersScenario(),
+
+  // JSON Schema network $ref dereferencing (SEP-2106)
+  new JsonSchemaRefDerefScenario()
 ];
 
 // Core scenarios (tier 1 requirements)
