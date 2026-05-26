@@ -1227,13 +1227,13 @@ app.post('/mcp', async (req, res) => {
       });
     }
 
-    // Protocol Version Negotiation Matrix (-32602, HTTP 400)
+    // Protocol Version Negotiation Matrix (-32004, HTTP 400)
     if (metaVersion !== 'DRAFT-2026-v1') {
       return res.status(400).json({
         jsonrpc: '2.0',
         id,
         error: {
-          code: -32602,
+          code: -32004,
           message: 'UnsupportedProtocolVersionError',
           data: { supported: ['DRAFT-2026-v1'] }
         }
@@ -1296,7 +1296,10 @@ app.post('/mcp', async (req, res) => {
           supportedVersions: ['DRAFT-2026-v1'],
           capabilities: {
             tools: { listChanged: true }, // Explicitly announce dynamic capabilities matching Section 7 expectations
-            prompts: { listChanged: true }
+            prompts: { listChanged: true },
+            // resources/list, resources/templates/list and resources/read are
+            // served on this path, so the capability must be declared too.
+            resources: {}
           },
           serverInfo: { name: 'everything-stateless-server', version: '1.0.0' }
         }
@@ -1371,7 +1374,10 @@ app.post('/mcp', async (req, res) => {
               description: 'Diagnostic logging validator tool',
               inputSchema: { type: 'object', properties: {} }
             }
-          ]
+          ],
+          // SEP-2549 caching hints are required on cacheable list results.
+          ttlMs: 300000,
+          cacheScope: 'public'
         }
       });
     }
@@ -1387,7 +1393,9 @@ app.post('/mcp', async (req, res) => {
               name: 'test_input_required_result_prompt',
               description: 'MRTR: prompt that requires elicitation input'
             }
-          ]
+          ],
+          ttlMs: 300000,
+          cacheScope: 'public'
         }
       });
     }
@@ -1440,6 +1448,69 @@ app.post('/mcp', async (req, res) => {
           }
         });
       }
+    }
+
+    // Resources on the stateless path (SEP-2575): SEP-2549 hints + SEP-2164 errors.
+    if (method === 'resources/list') {
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          resources: [
+            {
+              uri: 'test://stateless-static-text',
+              name: 'Stateless Static Text',
+              description: 'A static text resource served on the draft path',
+              mimeType: 'text/plain'
+            }
+          ],
+          ttlMs: 300000,
+          cacheScope: 'public'
+        }
+      });
+    }
+
+    if (method === 'resources/templates/list') {
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          resourceTemplates: [],
+          ttlMs: 300000,
+          cacheScope: 'public'
+        }
+      });
+    }
+
+    if (method === 'resources/read') {
+      const uri = params.uri as string | undefined;
+      if (uri === 'test://stateless-static-text') {
+        return res.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            contents: [
+              {
+                uri,
+                mimeType: 'text/plain',
+                text: 'Static text content from the stateless draft path.'
+              }
+            ],
+            ttlMs: 300000,
+            cacheScope: 'private'
+          }
+        });
+      }
+      // SEP-2164: unknown resources get -32602 with the requested uri in data.
+      return res.status(200).json({
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32602,
+          message: 'Resource not found',
+          data: { uri }
+        }
+      });
     }
 
     if (method === 'tools/call') {
