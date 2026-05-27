@@ -71,6 +71,16 @@ export interface RawSession {
   initializeResult: Record<string, unknown>;
 
   /**
+   * Cache of `tool name → inputSchema` populated by an initial
+   * `tools/list` call after the handshake. Drives SEP-2243
+   * §"Custom Headers from Tool Parameters" — when the schema marks a
+   * property with `x-mcp-header`, the corresponding `tools/call`
+   * argument value is mirrored as an `Mcp-Param-*` HTTP header. Empty
+   * when the server has no tools or rejects `tools/list`.
+   */
+  toolSchemas: Map<string, unknown>;
+
+  /**
    * Send a JSON-RPC request and return the parsed `result` field. Throws
    * an McpError when the server returns an `error` frame, so existing
    * `if (e instanceof McpError) ...` and `if (e.code === ...)` checks
@@ -227,12 +237,15 @@ async function initLegacySession(
     'MCP-Protocol-Version': negotiated
   });
 
+  const toolSchemas = new Map<string, unknown>();
+
   const session: RawSession = {
     wire: 'legacy',
     sessionId,
     protocolVersion: negotiated,
     serverCapabilities,
     initializeResult,
+    toolSchemas,
 
     async requestFull(method, params, extraHeaders) {
       const id = nextRawId();
@@ -240,7 +253,7 @@ async function initLegacySession(
         method: 'POST',
         headers: {
           ...sessionHeaders(),
-          ...routingHeaders(method, params, negotiated),
+          ...routingHeaders(method, params, negotiated, toolSchemas),
           ...(extraHeaders ?? {})
         },
         body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
@@ -265,7 +278,7 @@ async function initLegacySession(
         method: 'POST',
         headers: {
           ...sessionHeaders(),
-          ...routingHeaders(method, params, negotiated)
+          ...routingHeaders(method, params, negotiated, toolSchemas)
         },
         body: JSON.stringify({ jsonrpc: '2.0', method, params })
       });
@@ -292,6 +305,7 @@ async function initLegacySession(
   };
 
   await session.notification('notifications/initialized');
+  await primeToolSchemas(session);
   return session;
 }
 
@@ -354,12 +368,15 @@ async function initStatelessSession(
       ? (discoverResult.capabilities as Record<string, unknown>)
       : {};
 
+  const toolSchemas = new Map<string, unknown>();
+
   const session: RawSession = {
     wire: 'stateless',
     sessionId: '',
     protocolVersion,
     serverCapabilities,
     initializeResult: discoverResult,
+    toolSchemas,
 
     async requestFull(method, params, extraHeaders) {
       const id = nextRawId();
@@ -367,7 +384,7 @@ async function initStatelessSession(
         method: 'POST',
         headers: {
           ...baseHeaders(),
-          ...routingHeaders(method, params, protocolVersion),
+          ...routingHeaders(method, params, protocolVersion, toolSchemas),
           ...(extraHeaders ?? {})
         },
         body: JSON.stringify({
@@ -397,7 +414,7 @@ async function initStatelessSession(
         method: 'POST',
         headers: {
           ...baseHeaders(),
-          ...routingHeaders(method, params, protocolVersion)
+          ...routingHeaders(method, params, protocolVersion, toolSchemas)
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
@@ -417,7 +434,34 @@ async function initStatelessSession(
     }
   };
 
+  await primeToolSchemas(session);
   return session;
+}
+
+/**
+ * Best-effort initial `tools/list` to populate `session.toolSchemas`.
+ * Swallows any failure (server may not advertise tools at all, or may
+ * reject the call before the session has negotiated something the
+ * server requires) so the session is still usable for tasks/* and
+ * other non-tool methods. Scenarios that need `Mcp-Param-*` headers
+ * inherit a populated cache; scenarios that don't aren't affected by
+ * the failure.
+ */
+async function primeToolSchemas(session: RawSession): Promise<void> {
+  try {
+    const result = (await session.request('tools/list')) as {
+      tools?: Array<{ name?: unknown; inputSchema?: unknown }>;
+    };
+    if (!Array.isArray(result.tools)) return;
+    for (const tool of result.tools) {
+      if (typeof tool?.name !== 'string') continue;
+      if (tool.inputSchema === undefined) continue;
+      session.toolSchemas.set(tool.name, tool.inputSchema);
+    }
+  } catch {
+    // Empty cache is the safe default — `routingHeaders` simply skips
+    // Mcp-Param-* emission when no schema is cached for the tool.
+  }
 }
 
 let rawIdCounter = 0;
@@ -438,8 +482,10 @@ export const SEP_2243_ENFORCED_VERSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * SEP-2243 routing headers (Mcp-Method, Mcp-Name) the server expects
- * on every request to an SEP-2243-enforcing protocol version.
+ * SEP-2243 routing headers (Mcp-Method, Mcp-Name, and per-tool
+ * `Mcp-Param-*`) the server expects on every request to an
+ * SEP-2243-enforcing protocol version.
+ *
  * Conformant servers reject with `-32001 HeaderMismatch` when
  * Mcp-Method is missing / mismatched, and likewise for Mcp-Name on
  * any method whose body-side identifier doesn't match the header.
@@ -454,24 +500,28 @@ export const SEP_2243_ENFORCED_VERSIONS: ReadonlySet<string> = new Set([
  *   - tasks/update    → params.taskId      (SEP-2663)
  *   - tasks/cancel    → params.taskId      (SEP-2663)
  *
+ * `Mcp-Param-<Suffix>` headers (per SEP-2243 §Custom Headers from Tool
+ * Parameters) are emitted on `tools/call` when the tool's input schema
+ * marks a primitive-typed property with `x-mcp-header: "<Suffix>"`.
+ * The argument value is encoded per SEP-2243 §value-encoding —
+ * printable ASCII passes through verbatim; anything else (non-ASCII,
+ * control chars, leading/trailing whitespace) gets wrapped as
+ * `=?base64?{base64-utf8}?=`. The `toolSchemas` cache is populated by
+ * an initial `tools/list` during session init; calls against tools the
+ * cache doesn't know about emit `Mcp-Method` + `Mcp-Name` only.
+ *
  * Scenarios that deliberately probe the mismatch path supply
  * `extraHeaders` that override these auto-populated values.
  *
  * Returns an empty record for protocol versions that predate SEP-2243
  * so the helper doesn't put noise on the wire when the spec doesn't
  * require it.
- *
- * TODO(SEP-2243 §Custom Headers from Tool Parameters): when a tool's
- * input schema annotates a parameter with `x-mcp-header: "<Suffix>"`,
- * the client should mirror that parameter's value as an
- * `Mcp-Param-<Suffix>` HTTP header on `tools/call`. Requires caching
- * the tools/list schema during init; not exercised by current tasks
- * scenarios. Tracked as a follow-up.
  */
 export function routingHeaders(
   method: string,
   params: Record<string, unknown> | undefined,
-  protocolVersion: string
+  protocolVersion: string,
+  toolSchemas?: Map<string, unknown>
 ): Record<string, string> {
   if (!SEP_2243_ENFORCED_VERSIONS.has(protocolVersion)) {
     return {};
@@ -497,7 +547,102 @@ export function routingHeaders(
       }
       break;
   }
+  if (
+    method === 'tools/call' &&
+    toolSchemas &&
+    typeof params?.name === 'string'
+  ) {
+    const schema = toolSchemas.get(params.name);
+    const args = params.arguments;
+    if (schema && args && typeof args === 'object') {
+      Object.assign(
+        headers,
+        mcpParamHeaders(schema, args as Record<string, unknown>)
+      );
+    }
+  }
   return headers;
+}
+
+/**
+ * Build the `Mcp-Param-*` header set for a tools/call based on the
+ * tool's inputSchema (SEP-2243 §Custom Headers from Tool Parameters).
+ * Walks `properties` for primitive-typed entries marked with the
+ * `x-mcp-header` keyword and mirrors the matching argument value via
+ * an `Mcp-Param-<Suffix>` header. Schemas without annotations yield
+ * an empty record.
+ *
+ * Mirrors `client/headers.go` in mcpkit so the conformance harness
+ * sends the same wire shape a real client would.
+ */
+function mcpParamHeaders(
+  inputSchema: unknown,
+  args: Record<string, unknown>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!inputSchema || typeof inputSchema !== 'object') return out;
+  const props = (inputSchema as { properties?: unknown }).properties;
+  if (!props || typeof props !== 'object') return out;
+  for (const [propName, raw] of Object.entries(
+    props as Record<string, unknown>
+  )) {
+    if (!raw || typeof raw !== 'object') continue;
+    const propMap = raw as Record<string, unknown>;
+    const headerSuffix = propMap['x-mcp-header'];
+    if (typeof headerSuffix !== 'string' || headerSuffix === '') continue;
+    const propType = propMap.type;
+    if (
+      propType !== 'string' &&
+      propType !== 'number' &&
+      propType !== 'integer' &&
+      propType !== 'boolean'
+    ) {
+      continue;
+    }
+    if (!(propName in args)) continue;
+    const encoded = encodeMcpParamValue(args[propName]);
+    if (encoded === null) continue;
+    out[`Mcp-Param-${headerSuffix}`] = encoded;
+  }
+  return out;
+}
+
+/**
+ * SEP-2243 §value-encoding. Null/undefined → header omitted (returns
+ * null sentinel). Plain ASCII strings (no leading/trailing whitespace,
+ * no tab/control chars, no non-ASCII) pass through verbatim. Anything
+ * else gets wrapped as `=?base64?{base64-utf8}?=`. Numbers serialize
+ * to their shortest round-trip form; booleans to "true"/"false".
+ */
+function encodeMcpParamValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return encodeMcpParamString(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) return String(value);
+    return value.toString();
+  }
+  return String(value);
+}
+
+function encodeMcpParamString(s: string): string {
+  if (s.length === 0) return s;
+  if (s.trim() !== s) return wrapBase64(s);
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code === 0x09 || code < 0x20 || code > 0x7e) {
+      return wrapBase64(s);
+    }
+  }
+  return s;
+}
+
+function wrapBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  // btoa wants a binary string; pack each byte as a code unit.
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return `=?base64?${btoa(bin)}?=`;
 }
 
 /**
