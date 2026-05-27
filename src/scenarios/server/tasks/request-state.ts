@@ -27,14 +27,10 @@ import {
   ScenarioSource,
   ScenarioRunOptions
 } from '../../../types';
-import {
-  SEP_2663_REF,
-  TASKS_EXTENSION_ID,
-  errMsg,
-  failureCheck,
-  initRawSession,
-  type RawSession
-} from './helpers';
+import { SEP_2663_REF } from '../_shared/sep-refs';
+import { errMsg, failureCheck } from '../_shared/checks';
+import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { TASKS_EXTENSION_ID } from './helpers';
 
 export class TasksRequestStateRemovalScenario implements ClientScenario {
   name = 'tasks-request-state-removal';

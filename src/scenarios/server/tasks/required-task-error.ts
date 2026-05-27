@@ -35,14 +35,10 @@ import {
   ScenarioSource,
   ScenarioRunOptions
 } from '../../../types';
-import {
-  SEP_2575_REF,
-  SEP_2663_REF,
-  TASKS_EXTENSION_ID,
-  errMsg,
-  initRawSession,
-  type RawSession
-} from './helpers';
+import { SEP_2575_REF, SEP_2663_REF } from '../_shared/sep-refs';
+import { errMsg } from '../_shared/checks';
+import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { TASKS_EXTENSION_ID } from './helpers';
 
 const MISSING_REQUIRED_CLIENT_CAPABILITY = -32003;
 const REQUIRED_TASK_TOOL = 'failing_job';

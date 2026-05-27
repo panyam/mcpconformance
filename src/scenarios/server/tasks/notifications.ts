@@ -21,7 +21,8 @@ import {
   ConformanceCheck,
   ScenarioSource
 } from '../../../types';
-import { SEP_2663_REF, skipCheck } from './helpers';
+import { SEP_2663_REF } from '../_shared/sep-refs';
+import { skipCheck } from '../_shared/checks';
 
 export class TasksStatusNotificationsScenario implements ClientScenario {
   name = 'tasks-status-notifications';
