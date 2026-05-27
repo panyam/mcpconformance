@@ -36,25 +36,27 @@ const HAVE_TARGET = Boolean(SERVER_URL);
 const MRTR_SCENARIOS = [new MrtrEphemeralFlowScenario()];
 
 // SEP-2322 ephemeral MRTR (InputRequiredResult on tools/call) is
-// wire-independent in spec, but the stateless dispatcher edges
-// (subscriptions/listen, per-request capability gating, `_meta.logLevel`)
-// need scenario-side adaptation before stateless grades meaningfully.
-// Default to legacy-only; set MCP_WIRE_MODES=legacy,stateless (or
-// MCP_WIRE_MODES=stateless) to opt the matrix on. Shares the env var
-// and the setDefaultWireStateless hook with the tasks suite — wire
-// mode is a cross-cutting conformance concern, one knob drives both.
+// wire-independent in spec, so the harness runs every scenario
+// against both the legacy session wire AND the SEP-2575 stateless
+// wire by default. Pin with MCP_WIRE_MODES=legacy or
+// MCP_WIRE_MODES=stateless when an SDK has only one wire
+// implemented. Shares the env var and the setDefaultWireStateless
+// hook with the tasks suite — wire mode is a cross-cutting
+// conformance concern, one knob drives both.
 type WireMode = 'legacy' | 'stateless';
 
 const VALID_MODES: ReadonlySet<WireMode> = new Set(['legacy', 'stateless']);
 
+const DEFAULT_WIRE_MODES: WireMode[] = ['legacy', 'stateless'];
+
 function parseWireModes(): WireMode[] {
   const raw = process.env.MCP_WIRE_MODES;
-  if (!raw) return ['legacy'];
+  if (!raw) return DEFAULT_WIRE_MODES;
   const modes = raw
     .split(',')
     .map((s) => s.trim().toLowerCase() as WireMode)
     .filter((m) => VALID_MODES.has(m));
-  return modes.length > 0 ? modes : ['legacy'];
+  return modes.length > 0 ? modes : DEFAULT_WIRE_MODES;
 }
 
 const WIRE_MODES: WireMode[] = parseWireModes();
