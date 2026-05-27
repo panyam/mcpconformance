@@ -158,13 +158,37 @@ export interface JsonRpcResponse {
 }
 
 export interface RawSession {
-  /** The session ID issued by the server on initialize (Mcp-Session-Id). */
+  /**
+   * The wire mode this session speaks. `legacy` uses the
+   * initialize+Mcp-Session-Id handshake; `stateless` uses the SEP-2575
+   * per-request `_meta` envelope. Most scenarios are wire-agnostic,
+   * but a handful (capability negotiation, request headers) need to
+   * branch on this flag.
+   */
+  wire: 'legacy' | 'stateless';
+
+  /**
+   * The session ID issued by the server on initialize (legacy wire).
+   * Empty on the stateless wire — there is no session id.
+   */
   sessionId: string;
 
-  /** The protocolVersion the server returned on initialize. */
+  /** The protocolVersion negotiated (legacy) or pinned (stateless). */
   protocolVersion: string;
 
-  /** The full initialize result (capabilities, serverInfo, instructions, ...). */
+  /**
+   * Server-advertised capabilities. On the legacy wire this comes from
+   * the `initialize` response; on the stateless wire from
+   * `server/discover`. Scenarios that want to inspect what the server
+   * declares should read this regardless of mode.
+   */
+  serverCapabilities: Record<string, unknown>;
+
+  /**
+   * The full handshake result. Legacy: `initialize` response. Stateless:
+   * `server/discover` response. Kept as a raw object so scenarios can
+   * inspect serverInfo / instructions / extensions / etc.
+   */
   initializeResult: Record<string, unknown>;
 
   /**
@@ -201,13 +225,66 @@ export interface InitRawOptions {
   protocolVersion?: string;
   capabilities?: Record<string, unknown>;
   clientInfo?: { name: string; version: string };
+
+  /**
+   * When true, use the SEP-2575 stateless wire: no initialize handshake,
+   * no Mcp-Session-Id, every request carries the
+   * `_meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
+   * clientCapabilities}` envelope plus the `MCP-Protocol-Version`
+   * header. The handshake step is replaced by an initial `server/discover`
+   * call so scenarios that inspect server-advertised capabilities still
+   * have a populated `serverCapabilities`.
+   *
+   * When false (default), use the legacy session wire: initialize +
+   * notifications/initialized + Mcp-Session-Id on follow-up calls. No
+   * `_meta` injection. No `MCP-Protocol-Version` header on follow-up
+   * calls (would otherwise flip mcpkit's Dual-mode wire detection to
+   * stateless).
+   *
+   * Both wires are required to pass the same SEP-2663 / SEP-2322 tasks
+   * scenarios since tasks behavior is wire-independent. The default
+   * harness loops over both modes per scenario.
+   */
+  stateless?: boolean;
 }
 
 /**
- * Open a Streamable HTTP MCP session via raw fetch instead of the SDK's
- * Client.connect(). Scenarios tagged DRAFT_PROTOCOL_VERSION should use
- * this so the initialize body carries the draft version on the wire
- * rather than the SDK's pinned LATEST_PROTOCOL_VERSION.
+ * Module-level default for the wire mode initRawSession uses when a
+ * scenario doesn't override `opts.stateless`. Toggled by the harness
+ * (`all-scenarios.test.ts`) to run every scenario twice — once on the
+ * legacy wire, once on the stateless wire — without changing the
+ * scenario call sites. External callers may also flip it once via
+ * `setDefaultWireStateless` for ad-hoc runs.
+ */
+let defaultStateless = false;
+
+/**
+ * Force initRawSession's wire-mode default (when scenarios don't pass
+ * `opts.stateless` explicitly). The test harness drives this for the
+ * matrix run; scenarios themselves don't call it.
+ */
+export function setDefaultWireStateless(stateless: boolean): void {
+  defaultStateless = stateless;
+}
+
+/**
+ * Open a session for the SEP-2663 tasks scenarios against one of two
+ * MCP wires. With `stateless: false` (default), use the legacy session
+ * wire — POST `initialize`, capture `Mcp-Session-Id`, send follow-ups
+ * with only the session header. With `stateless: true`, use the
+ * SEP-2575 wire — no initialize, no session id, every body carries a
+ * `_meta.io.modelcontextprotocol/{protocolVersion,clientInfo,
+ * clientCapabilities}` envelope plus the `MCP-Protocol-Version` HTTP
+ * header on every call.
+ *
+ * Tasks scenarios are wire-independent in spec, so the harness runs
+ * each scenario twice (once per wire) against any server that speaks
+ * both. mcpkit's default Dual mode is the canonical reference.
+ *
+ * Both modes pin `protocolVersion` to `DRAFT_PROTOCOL_VERSION` by
+ * default; the SDK's `Client.connect()` would otherwise pin the
+ * package-level `LATEST_PROTOCOL_VERSION` and prevent draft-only
+ * servers (or the SEP-2575 wire) from handshaking.
  */
 export async function initRawSession(
   serverUrl: string,
@@ -219,7 +296,19 @@ export async function initRawSession(
     name: 'mcp-conformance',
     version: '1.0'
   };
+  const stateless =
+    typeof opts.stateless === 'boolean' ? opts.stateless : defaultStateless;
+  return stateless
+    ? initStatelessSession(serverUrl, protocolVersion, capabilities, clientInfo)
+    : initLegacySession(serverUrl, protocolVersion, capabilities, clientInfo);
+}
 
+async function initLegacySession(
+  serverUrl: string,
+  protocolVersion: string,
+  capabilities: Record<string, unknown>,
+  clientInfo: { name: string; version: string }
+): Promise<RawSession> {
   const initId = nextRawId();
   const initResp = await fetch(serverUrl, {
     method: 'POST',
@@ -245,8 +334,6 @@ export async function initRawSession(
   }
   const initializeResult = initBody.result ?? {};
 
-  // Streamable HTTP MUST issue Mcp-Session-Id on the initialize response.
-  // Without it subsequent requests have nowhere to land.
   const sessionId = initResp.headers.get('mcp-session-id') || '';
   if (!sessionId) {
     throw new Error(
@@ -259,23 +346,40 @@ export async function initRawSession(
       ? (initializeResult.protocolVersion as string)
       : protocolVersion;
 
+  const serverCapabilities =
+    typeof initializeResult.capabilities === 'object' &&
+    initializeResult.capabilities !== null
+      ? (initializeResult.capabilities as Record<string, unknown>)
+      : {};
+
+  // Per the SEP-2575 dispatcher precedence (server/stateless_detect.go
+  // in mcpkit), MCP-Protocol-Version is a stateless-wire signal that
+  // wins over Mcp-Session-Id. To keep follow-up calls routed to the
+  // legacy wire under Dual mode, do NOT emit MCP-Protocol-Version on
+  // legacy traffic. The Mcp-Session-Id header alone is the legacy
+  // routing signal.
   const sessionHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
-    'Mcp-Session-Id': sessionId,
-    'MCP-Protocol-Version': negotiated
+    'Mcp-Session-Id': sessionId
   });
 
   const session: RawSession = {
+    wire: 'legacy',
     sessionId,
     protocolVersion: negotiated,
+    serverCapabilities,
     initializeResult,
 
     async requestFull(method, params, extraHeaders) {
       const id = nextRawId();
       const resp = await fetch(serverUrl, {
         method: 'POST',
-        headers: { ...sessionHeaders(), ...(extraHeaders ?? {}) },
+        headers: {
+          ...sessionHeaders(),
+          ...routingHeaders(method, params, negotiated),
+          ...(extraHeaders ?? {})
+        },
         body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
       });
       return readJsonRpcResponse(resp, id);
@@ -296,11 +400,12 @@ export async function initRawSession(
     async notification(method, params) {
       const resp = await fetch(serverUrl, {
         method: 'POST',
-        headers: sessionHeaders(),
+        headers: {
+          ...sessionHeaders(),
+          ...routingHeaders(method, params, negotiated)
+        },
         body: JSON.stringify({ jsonrpc: '2.0', method, params })
       });
-      // Notifications get 202 Accepted (no body) per spec. Drain to free
-      // the socket; don't parse.
       try {
         await resp.text();
       } catch {
@@ -312,10 +417,7 @@ export async function initRawSession(
       try {
         await fetch(serverUrl, {
           method: 'DELETE',
-          headers: {
-            'Mcp-Session-Id': sessionId,
-            'MCP-Protocol-Version': negotiated
-          }
+          headers: { 'Mcp-Session-Id': sessionId }
         });
       } catch {
         /* best-effort */
@@ -323,10 +425,131 @@ export async function initRawSession(
     }
   };
 
-  // Per spec, the client SHOULD send notifications/initialized after the
-  // initialize result is observed. Servers that gate session-active state
-  // on this notification (mcpkit does) need it before the first request.
   await session.notification('notifications/initialized');
+  return session;
+}
+
+async function initStatelessSession(
+  serverUrl: string,
+  protocolVersion: string,
+  capabilities: Record<string, unknown>,
+  clientInfo: { name: string; version: string }
+): Promise<RawSession> {
+  // SEP-2575 has no initialize handshake. The closest equivalent is
+  // server/discover, which surfaces serverInfo + advertised
+  // capabilities + supported protocol versions. Scenarios that inspect
+  // serverCapabilities still get a populated value via discover.
+  const meta = {
+    'io.modelcontextprotocol/protocolVersion': protocolVersion,
+    'io.modelcontextprotocol/clientInfo': clientInfo,
+    'io.modelcontextprotocol/clientCapabilities': capabilities
+  };
+
+  const baseHeaders = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    'MCP-Protocol-Version': protocolVersion
+  });
+
+  const injectMeta = (
+    params: Record<string, unknown> | undefined
+  ): Record<string, unknown> => {
+    const base = params ?? {};
+    const callerMeta = (base._meta ?? {}) as Record<string, unknown>;
+    return { ...base, _meta: { ...meta, ...callerMeta } };
+  };
+
+  const discoverId = nextRawId();
+  const discoverResp = await fetch(serverUrl, {
+    method: 'POST',
+    headers: {
+      ...baseHeaders(),
+      ...routingHeaders('server/discover', {}, protocolVersion)
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: discoverId,
+      method: 'server/discover',
+      params: injectMeta({})
+    })
+  });
+  const discoverBody = await readJsonRpcResponse(discoverResp, discoverId);
+  if (discoverBody.error) {
+    throw new McpError(
+      discoverBody.error.code,
+      discoverBody.error.message,
+      discoverBody.error.data
+    );
+  }
+  const discoverResult = discoverBody.result ?? {};
+  const serverCapabilities =
+    typeof discoverResult.capabilities === 'object' &&
+    discoverResult.capabilities !== null
+      ? (discoverResult.capabilities as Record<string, unknown>)
+      : {};
+
+  const session: RawSession = {
+    wire: 'stateless',
+    sessionId: '',
+    protocolVersion,
+    serverCapabilities,
+    initializeResult: discoverResult,
+
+    async requestFull(method, params, extraHeaders) {
+      const id = nextRawId();
+      const resp = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          ...baseHeaders(),
+          ...routingHeaders(method, params, protocolVersion),
+          ...(extraHeaders ?? {})
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method,
+          params: injectMeta(params)
+        })
+      });
+      return readJsonRpcResponse(resp, id);
+    },
+
+    async request(method, params, extraHeaders) {
+      const body = await session.requestFull(method, params, extraHeaders);
+      if (body.error) {
+        throw new McpError(
+          body.error.code,
+          body.error.message,
+          body.error.data
+        );
+      }
+      return body.result ?? {};
+    },
+
+    async notification(method, params) {
+      const resp = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          ...baseHeaders(),
+          ...routingHeaders(method, params, protocolVersion)
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method,
+          params: injectMeta(params)
+        })
+      });
+      try {
+        await resp.text();
+      } catch {
+        /* swallow */
+      }
+    },
+
+    async close() {
+      // SEP-2575 has no session to close.
+    }
+  };
 
   return session;
 }
@@ -335,6 +558,47 @@ let rawIdCounter = 0;
 function nextRawId(): number {
   rawIdCounter += 1;
   return rawIdCounter;
+}
+
+/**
+ * Protocol versions that mandate SEP-2243 routing headers. The
+ * companion to mcpkit's server-side `isSEP2243EnforcedVersion`:
+ * `DRAFT-2026-v1` is the only version today that ships with
+ * SEP-2243; dated releases (2025-11-25 and earlier) predate the SEP.
+ * Widen this set when a future dated release picks SEP-2243 up.
+ */
+const SEP_2243_ENFORCED_VERSIONS: ReadonlySet<string> = new Set([
+  DRAFT_PROTOCOL_VERSION
+]);
+
+/**
+ * SEP-2243 routing headers (Mcp-Method, Mcp-Name) the server expects
+ * on every request to an SEP-2243-enforcing protocol version. mcpkit's
+ * validator rejects with `-32001 HeaderMismatch` when Mcp-Method is
+ * missing / mismatched, and likewise for Mcp-Name on tools/call
+ * (params.name) and resources/read (params.uri). Scenarios that
+ * deliberately probe the mismatch path supply `extraHeaders` that
+ * override these auto-populated values.
+ *
+ * Returns an empty record for protocol versions that predate SEP-2243
+ * so the helper doesn't put noise on the wire when the spec doesn't
+ * require it.
+ */
+function routingHeaders(
+  method: string,
+  params: Record<string, unknown> | undefined,
+  protocolVersion: string
+): Record<string, string> {
+  if (!SEP_2243_ENFORCED_VERSIONS.has(protocolVersion)) {
+    return {};
+  }
+  const headers: Record<string, string> = { 'Mcp-Method': method };
+  if (method === 'tools/call' && typeof params?.name === 'string') {
+    headers['Mcp-Name'] = params.name;
+  } else if (method === 'resources/read' && typeof params?.uri === 'string') {
+    headers['Mcp-Name'] = params.uri;
+  }
+  return headers;
 }
 
 /**

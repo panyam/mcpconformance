@@ -22,8 +22,9 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MrtrEphemeralFlowScenario } from './ephemeral-flow';
+import { setDefaultWireStateless } from '../tasks/helpers';
 import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.MRTR_SERVER_URL;
@@ -33,6 +34,30 @@ const SHOULD_SPAWN = Boolean(SERVER_URL && SERVER_CMD);
 const HAVE_TARGET = Boolean(SERVER_URL);
 
 const MRTR_SCENARIOS = [new MrtrEphemeralFlowScenario()];
+
+// SEP-2322 ephemeral MRTR (InputRequiredResult on tools/call) is
+// wire-independent in spec, but the stateless dispatcher edges
+// (subscriptions/listen, per-request capability gating, `_meta.logLevel`)
+// need scenario-side adaptation before stateless grades meaningfully.
+// Default to legacy-only; set MRTR_WIRE_MODES=legacy,stateless (or
+// MRTR_WIRE_MODES=stateless) to opt the matrix on. Shares the
+// setDefaultWireStateless hook with the tasks suite — one module-level
+// flag drives both.
+type WireMode = 'legacy' | 'stateless';
+
+const VALID_MODES: ReadonlySet<WireMode> = new Set(['legacy', 'stateless']);
+
+function parseWireModes(): WireMode[] {
+  const raw = process.env.MRTR_WIRE_MODES;
+  if (!raw) return ['legacy'];
+  const modes = raw
+    .split(',')
+    .map((s) => s.trim().toLowerCase() as WireMode)
+    .filter((m) => VALID_MODES.has(m));
+  return modes.length > 0 ? modes : ['legacy'];
+}
+
+const WIRE_MODES: WireMode[] = parseWireModes();
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;
 
@@ -95,20 +120,28 @@ describeIfTarget('SEP-2322 MRTR — server conformance', () => {
     serverProcess = null;
   });
 
-  for (const scenario of MRTR_SCENARIOS) {
-    it(`${scenario.name} — all checks succeed against fixture`, async () => {
-      const checks = await scenario.run(SERVER_URL!);
-      expect(checks.length).toBeGreaterThan(0);
-      const failures = checks.filter(
-        (c) => c.status === 'FAILURE' || c.status === 'WARNING'
-      );
-      if (failures.length > 0) {
-        const detail = failures
-          .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
-          .join('\n');
-        throw new Error(
-          `${failures.length}/${checks.length} checks failed:\n${detail}`
-        );
+  for (const wire of WIRE_MODES) {
+    describe(`${wire} wire`, () => {
+      beforeEach(() => {
+        setDefaultWireStateless(wire === 'stateless');
+      });
+
+      for (const scenario of MRTR_SCENARIOS) {
+        it(`${scenario.name} — all checks succeed against fixture`, async () => {
+          const checks = await scenario.run(SERVER_URL!);
+          expect(checks.length).toBeGreaterThan(0);
+          const failures = checks.filter(
+            (c) => c.status === 'FAILURE' || c.status === 'WARNING'
+          );
+          if (failures.length > 0) {
+            const detail = failures
+              .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
+              .join('\n');
+            throw new Error(
+              `${failures.length}/${checks.length} checks failed:\n${detail}`
+            );
+          }
+        });
       }
     });
   }
