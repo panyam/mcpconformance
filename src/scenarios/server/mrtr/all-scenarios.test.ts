@@ -39,16 +39,16 @@ const MRTR_SCENARIOS = [new MrtrEphemeralFlowScenario()];
 // wire-independent in spec, but the stateless dispatcher edges
 // (subscriptions/listen, per-request capability gating, `_meta.logLevel`)
 // need scenario-side adaptation before stateless grades meaningfully.
-// Default to legacy-only; set MRTR_WIRE_MODES=legacy,stateless (or
-// MRTR_WIRE_MODES=stateless) to opt the matrix on. Shares the
-// setDefaultWireStateless hook with the tasks suite — one module-level
-// flag drives both.
+// Default to legacy-only; set MCP_WIRE_MODES=legacy,stateless (or
+// MCP_WIRE_MODES=stateless) to opt the matrix on. Shares the env var
+// and the setDefaultWireStateless hook with the tasks suite — wire
+// mode is a cross-cutting conformance concern, one knob drives both.
 type WireMode = 'legacy' | 'stateless';
 
 const VALID_MODES: ReadonlySet<WireMode> = new Set(['legacy', 'stateless']);
 
 function parseWireModes(): WireMode[] {
-  const raw = process.env.MRTR_WIRE_MODES;
+  const raw = process.env.MCP_WIRE_MODES;
   if (!raw) return ['legacy'];
   const modes = raw
     .split(',')

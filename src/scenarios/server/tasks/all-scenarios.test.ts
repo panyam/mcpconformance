@@ -66,14 +66,17 @@ const TASKS_SCENARIOS = [
 // dispatcher edges (subscriptions/listen for notifications,
 // per-request capability gating semantics, `_meta.logLevel` for
 // notifications/message, etc.) need scenario-side adaptation before
-// they grade meaningfully. Set TASKS_WIRE_MODES=legacy,stateless (or
-// TASKS_WIRE_MODES=stateless) to opt the matrix on for exploration.
+// they grade meaningfully. Set MCP_WIRE_MODES=legacy,stateless (or
+// MCP_WIRE_MODES=stateless) to opt the matrix on for exploration.
+// One env var drives both the tasks and mrtr harnesses since the
+// wire-mode choice is a cross-cutting conformance concern, not a
+// per-suite knob.
 type WireMode = 'legacy' | 'stateless';
 
 const VALID_MODES: ReadonlySet<WireMode> = new Set(['legacy', 'stateless']);
 
 function parseWireModes(): WireMode[] {
-  const raw = process.env.TASKS_WIRE_MODES;
+  const raw = process.env.MCP_WIRE_MODES;
   if (!raw) return ['legacy'];
   const modes = raw
     .split(',')
