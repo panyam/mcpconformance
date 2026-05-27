@@ -251,25 +251,6 @@ export interface InitRawOptions {
 }
 
 /**
- * Module-level default for the wire mode initRawSession uses when a
- * scenario doesn't override `opts.stateless`. Toggled by the harness
- * (`all-scenarios.test.ts`) to run every scenario twice — once on the
- * legacy wire, once on the stateless wire — without changing the
- * scenario call sites. External callers may also flip it once via
- * `setDefaultWireStateless` for ad-hoc runs.
- */
-let defaultStateless = false;
-
-/**
- * Force initRawSession's wire-mode default (when scenarios don't pass
- * `opts.stateless` explicitly). The test harness drives this for the
- * matrix run; scenarios themselves don't call it.
- */
-export function setDefaultWireStateless(stateless: boolean): void {
-  defaultStateless = stateless;
-}
-
-/**
  * Open a session for the SEP-2663 tasks scenarios against one of two
  * MCP wires. With `stateless: false` (default), use the legacy session
  * wire — POST `initialize`, capture `Mcp-Session-Id`, send follow-ups
@@ -298,8 +279,7 @@ export async function initRawSession(
     name: 'mcp-conformance',
     version: '1.0'
   };
-  const stateless =
-    typeof opts.stateless === 'boolean' ? opts.stateless : defaultStateless;
+  const stateless = opts.stateless === true;
   return stateless
     ? initStatelessSession(serverUrl, protocolVersion, capabilities, clientInfo)
     : initLegacySession(serverUrl, protocolVersion, capabilities, clientInfo);

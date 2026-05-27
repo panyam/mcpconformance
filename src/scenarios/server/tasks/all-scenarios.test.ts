@@ -28,7 +28,7 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TasksLifecycleScenario } from './lifecycle';
 import { TasksCapabilityNegotiationScenario } from './capability';
 import { TasksWireFieldsScenario } from './wire-fields';
@@ -38,7 +38,6 @@ import { TasksRequestHeadersScenario } from './headers';
 import { TasksDispatchScenario } from './dispatch';
 import { TasksStatusNotificationsScenario } from './notifications';
 import { TasksRequiredTaskErrorScenario } from './required-task-error';
-import { setDefaultWireStateless } from './helpers';
 import { waitForServerReady } from '../_shared/test-runner';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
@@ -149,13 +148,11 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
 
   for (const wire of WIRE_MODES) {
     describe(`${wire} wire`, () => {
-      beforeEach(() => {
-        setDefaultWireStateless(wire === 'stateless');
-      });
-
       for (const scenario of TASKS_SCENARIOS) {
         it(`${scenario.name} — all checks succeed against fixture`, async () => {
-          const checks = await scenario.run(SERVER_URL!);
+          const checks = await scenario.run(SERVER_URL!, {
+            stateless: wire === 'stateless'
+          });
           expect(checks.length).toBeGreaterThan(0);
           const failures = checks.filter(
             (c) => c.status === 'FAILURE' || c.status === 'WARNING'

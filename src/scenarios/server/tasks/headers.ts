@@ -25,7 +25,8 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSource
+  ScenarioSource,
+  ScenarioRunOptions
 } from '../../../types';
 import {
   SEP_2243_REF,
@@ -57,12 +58,16 @@ The JSON-RPC body is authoritative. The server MUST tolerate the
 headers, MUST NOT require them, and MUST NOT change dispatch behavior
 based on them — including when the headers disagree with the body.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(
+    serverUrl: string,
+    opts?: ScenarioRunOptions
+  ): Promise<ConformanceCheck[]> {
     const checks: ConformanceCheck[] = [];
 
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
+        stateless: opts?.stateless,
         capabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
       });
     } catch (error) {
