@@ -228,18 +228,20 @@ export interface InitRawOptions {
 
   /**
    * When true, use the SEP-2575 stateless wire: no initialize handshake,
-   * no Mcp-Session-Id, every request carries the
+   * no Mcp-Session-Id, every request body carries the
    * `_meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
-   * clientCapabilities}` envelope plus the `MCP-Protocol-Version`
-   * header. The handshake step is replaced by an initial `server/discover`
-   * call so scenarios that inspect server-advertised capabilities still
-   * have a populated `serverCapabilities`.
+   * clientCapabilities}` envelope. The handshake step is replaced by an
+   * initial `server/discover` call so scenarios that inspect
+   * server-advertised capabilities still have a populated
+   * `serverCapabilities`.
    *
    * When false (default), use the legacy session wire: initialize +
    * notifications/initialized + Mcp-Session-Id on follow-up calls. No
-   * `_meta` injection. No `MCP-Protocol-Version` header on follow-up
-   * calls (would otherwise flip mcpkit's Dual-mode wire detection to
-   * stateless).
+   * `_meta` injection.
+   *
+   * Independent of wire mode, the `MCP-Protocol-Version` HTTP header is
+   * sent on every post-initialize request — MCP 2025-11-25 mandates it
+   * on every subsequent POST/GET regardless of wire.
    *
    * Both wires are required to pass the same SEP-2663 / SEP-2322 tasks
    * scenarios since tasks behavior is wire-independent. The default
@@ -352,16 +354,17 @@ async function initLegacySession(
       ? (initializeResult.capabilities as Record<string, unknown>)
       : {};
 
-  // Per the SEP-2575 dispatcher precedence (server/stateless_detect.go
-  // in mcpkit), MCP-Protocol-Version is a stateless-wire signal that
-  // wins over Mcp-Session-Id. To keep follow-up calls routed to the
-  // legacy wire under Dual mode, do NOT emit MCP-Protocol-Version on
-  // legacy traffic. The Mcp-Session-Id header alone is the legacy
-  // routing signal.
+  // MCP 2025-11-25 §Protocol-Version Header: the client MUST include
+  // the `MCP-Protocol-Version` HTTP header on every subsequent HTTP
+  // request (POST or GET) after initialize. Universal post-initialize
+  // requirement; applies to legacy session traffic just as much as
+  // SEP-2575 stateless traffic. See:
+  // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#protocol-version-header
   const sessionHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
-    'Mcp-Session-Id': sessionId
+    'Mcp-Session-Id': sessionId,
+    'MCP-Protocol-Version': negotiated
   });
 
   const session: RawSession = {
@@ -417,7 +420,10 @@ async function initLegacySession(
       try {
         await fetch(serverUrl, {
           method: 'DELETE',
-          headers: { 'Mcp-Session-Id': sessionId }
+          headers: {
+            'Mcp-Session-Id': sessionId,
+            'MCP-Protocol-Version': negotiated
+          }
         });
       } catch {
         /* best-effort */
