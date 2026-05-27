@@ -559,16 +559,34 @@ const SEP_2243_ENFORCED_VERSIONS: ReadonlySet<string> = new Set([
 
 /**
  * SEP-2243 routing headers (Mcp-Method, Mcp-Name) the server expects
- * on every request to an SEP-2243-enforcing protocol version. mcpkit's
- * validator rejects with `-32001 HeaderMismatch` when Mcp-Method is
- * missing / mismatched, and likewise for Mcp-Name on tools/call
- * (params.name) and resources/read (params.uri). Scenarios that
- * deliberately probe the mismatch path supply `extraHeaders` that
- * override these auto-populated values.
+ * on every request to an SEP-2243-enforcing protocol version.
+ * Conformant servers reject with `-32001 HeaderMismatch` when
+ * Mcp-Method is missing / mismatched, and likewise for Mcp-Name on
+ * any method whose body-side identifier doesn't match the header.
+ *
+ * `Mcp-Name` surfaces (per SEP-2243 §Standard Headers + SEP-2663
+ * §Streamable HTTP routing headers):
+ *
+ *   - tools/call      → params.name        (tool name)
+ *   - resources/read  → params.uri         (resource URI)
+ *   - prompts/get     → params.name        (prompt name)
+ *   - tasks/get       → params.taskId      (SEP-2663)
+ *   - tasks/update    → params.taskId      (SEP-2663)
+ *   - tasks/cancel    → params.taskId      (SEP-2663)
+ *
+ * Scenarios that deliberately probe the mismatch path supply
+ * `extraHeaders` that override these auto-populated values.
  *
  * Returns an empty record for protocol versions that predate SEP-2243
  * so the helper doesn't put noise on the wire when the spec doesn't
  * require it.
+ *
+ * TODO(SEP-2243 §Custom Headers from Tool Parameters): when a tool's
+ * input schema annotates a parameter with `x-mcp-header: "<Suffix>"`,
+ * the client should mirror that parameter's value as an
+ * `Mcp-Param-<Suffix>` HTTP header on `tools/call`. Requires caching
+ * the tools/list schema during init; not exercised by current tasks
+ * scenarios. Tracked as a follow-up.
  */
 function routingHeaders(
   method: string,
@@ -579,10 +597,25 @@ function routingHeaders(
     return {};
   }
   const headers: Record<string, string> = { 'Mcp-Method': method };
-  if (method === 'tools/call' && typeof params?.name === 'string') {
-    headers['Mcp-Name'] = params.name;
-  } else if (method === 'resources/read' && typeof params?.uri === 'string') {
-    headers['Mcp-Name'] = params.uri;
+  switch (method) {
+    case 'tools/call':
+    case 'prompts/get':
+      if (typeof params?.name === 'string') {
+        headers['Mcp-Name'] = params.name;
+      }
+      break;
+    case 'resources/read':
+      if (typeof params?.uri === 'string') {
+        headers['Mcp-Name'] = params.uri;
+      }
+      break;
+    case 'tasks/get':
+    case 'tasks/update':
+    case 'tasks/cancel':
+      if (typeof params?.taskId === 'string') {
+        headers['Mcp-Name'] = params.taskId;
+      }
+      break;
   }
   return headers;
 }
