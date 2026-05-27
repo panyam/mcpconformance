@@ -85,6 +85,13 @@ function parseWireModes(): WireMode[] {
 
 const WIRE_MODES: WireMode[] = parseWireModes();
 
+// describe.each / it.each table shape: tuple of (label, statelessFlag) so
+// vitest reports the wire as a clean parameter row (`legacy wire`,
+// `stateless wire`) without us re-deriving the boolean inside each test.
+const WIRE_TABLE: ReadonlyArray<readonly [WireMode, boolean]> = WIRE_MODES.map(
+  (m) => [m, m === 'stateless'] as const
+);
+
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;
 
 describeIfTarget('SEP-2663 Tasks — server conformance', () => {
@@ -146,27 +153,24 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
     serverProcess = null;
   });
 
-  for (const wire of WIRE_MODES) {
-    describe(`${wire} wire`, () => {
-      for (const scenario of TASKS_SCENARIOS) {
-        it(`${scenario.name} — all checks succeed against fixture`, async () => {
-          const checks = await scenario.run(SERVER_URL!, {
-            stateless: wire === 'stateless'
-          });
-          expect(checks.length).toBeGreaterThan(0);
-          const failures = checks.filter(
-            (c) => c.status === 'FAILURE' || c.status === 'WARNING'
+  describe.each(WIRE_TABLE)('%s wire', (_wireLabel, stateless) => {
+    it.each(TASKS_SCENARIOS)(
+      '$name — all checks succeed against fixture',
+      async (scenario) => {
+        const checks = await scenario.run(SERVER_URL!, { stateless });
+        expect(checks.length).toBeGreaterThan(0);
+        const failures = checks.filter(
+          (c) => c.status === 'FAILURE' || c.status === 'WARNING'
+        );
+        if (failures.length > 0) {
+          const detail = failures
+            .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
+            .join('\n');
+          throw new Error(
+            `${failures.length}/${checks.length} checks failed:\n${detail}`
           );
-          if (failures.length > 0) {
-            const detail = failures
-              .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
-              .join('\n');
-            throw new Error(
-              `${failures.length}/${checks.length} checks failed:\n${detail}`
-            );
-          }
-        });
+        }
       }
-    });
-  }
+    );
+  });
 });
