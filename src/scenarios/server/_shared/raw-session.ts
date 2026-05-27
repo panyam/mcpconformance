@@ -151,8 +151,7 @@ export interface InitRawOptions {
  *
  * Tasks and MRTR scenarios are wire-independent in spec, so each
  * harness runs every scenario twice (once per wire) against any
- * server that speaks both. mcpkit's default Dual mode is the
- * canonical reference.
+ * server that speaks both.
  *
  * Both modes pin `protocolVersion` to `DRAFT_PROTOCOL_VERSION` by
  * default; the SDK's `Client.connect()` would otherwise pin the
@@ -471,8 +470,7 @@ export function nextRawId(): number {
 }
 
 /**
- * Protocol versions that mandate SEP-2243 routing headers. The
- * companion to mcpkit's server-side `isSEP2243EnforcedVersion`:
+ * Protocol versions that mandate SEP-2243 routing headers.
  * `DRAFT-2026-v1` is the only version today that ships with
  * SEP-2243; dated releases (2025-11-25 and earlier) predate the SEP.
  * Widen this set when a future dated release picks SEP-2243 up.
@@ -571,9 +569,6 @@ export function routingHeaders(
  * `x-mcp-header` keyword and mirrors the matching argument value via
  * an `Mcp-Param-<Suffix>` header. Schemas without annotations yield
  * an empty record.
- *
- * Mirrors `client/headers.go` in mcpkit so the conformance harness
- * sends the same wire shape a real client would.
  */
 function mcpParamHeaders(
   inputSchema: unknown,
