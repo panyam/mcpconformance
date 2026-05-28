@@ -26,12 +26,11 @@ import {
   DRAFT_PROTOCOL_VERSION,
   ScenarioRunOptions
 } from '../../../types';
-import { initRawSession, type RawSession } from '../tasks/helpers';
+import { SEP_2322_REF } from '../_shared/sep-refs';
+import { errMsg, failureCheck } from '../_shared/checks';
+import { initRawSession, type RawSession } from '../_shared/raw-session';
 import {
   MRTR_INPUT_REQUIRED_RESULT_TYPE,
-  SEP_2322_REF,
-  errMsg,
-  failureCheck,
   isCompleteResult,
   isInputRequiredResult,
   mockElicitResponse,
@@ -175,7 +174,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -222,7 +221,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -269,7 +268,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -326,7 +325,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -394,7 +393,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -467,7 +466,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 
@@ -501,7 +500,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
           specReferences: [SEP_2322_REF]
         });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error));
+        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
       }
     }
 

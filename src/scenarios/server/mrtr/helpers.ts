@@ -1,20 +1,18 @@
 /**
  * MRTR (SEP-2322 ephemeral) scenario helpers.
  *
- * Reuses the raw-rpc + session bootstrap from the tasks scenarios since
- * MRTR's wire shape (resultType discriminator, requestState, inputRequests)
- * is the SEP-2322 base that SEP-2663 builds on. SEP-2322 merged on
- * 2026-05-06 with the MRTR result type renamed from IncompleteResult to
- * InputRequiredResult and the wire literal flipped from "incomplete" to
- * "input_required" (commit de6d76fb, per dsp-ant request).
+ * Reuses the raw-rpc + session bootstrap from `_shared/raw-session.ts`
+ * since MRTR's wire shape (resultType discriminator, requestState,
+ * inputRequests) is the SEP-2322 base that SEP-2663 builds on.
+ * SEP-2322 merged on 2026-05-06 with the MRTR result type renamed
+ * from IncompleteResult to InputRequiredResult and the wire literal
+ * flipped from "incomplete" to "input_required" (commit de6d76fb,
+ * per dsp-ant request).
+ *
+ * Only MRTR-shaped helpers live here. SEP refs are imported from
+ * `_shared/sep-refs.ts`; the generic `errMsg` / `failureCheck` /
+ * `skipCheck` test scaffolding lives in `_shared/checks.ts`.
  */
-
-import type { ConformanceCheck, SpecReference } from '../../../types';
-
-export const SEP_2322_REF: SpecReference = {
-  id: 'SEP-2322',
-  url: 'https://github.com/modelcontextprotocol/specification/pull/2322'
-};
 
 // SPEC WATCH — MRTR resultType discriminator value
 // SEP-2322 merged on 2026-05-06 with the variant renamed to
@@ -59,26 +57,4 @@ export function mockSamplingResponse(text: string): Record<string, unknown> {
 /** Build a ListRootsResult-shaped mock response payload. */
 export function mockListRootsResponse(): Record<string, unknown> {
   return { roots: [{ uri: 'file:///test/root', name: 'Test Root' }] };
-}
-
-export function errMsg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-export function failureCheck(
-  id: string,
-  name: string,
-  description: string,
-  error: unknown,
-  specReferences: SpecReference[] = [SEP_2322_REF]
-): ConformanceCheck {
-  return {
-    id,
-    name,
-    description,
-    status: 'FAILURE',
-    timestamp: new Date().toISOString(),
-    errorMessage: errMsg(error),
-    specReferences
-  };
 }

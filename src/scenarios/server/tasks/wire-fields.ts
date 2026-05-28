@@ -16,16 +16,10 @@ import {
   ScenarioSource,
   ScenarioRunOptions
 } from '../../../types';
-import {
-  SEP_2663_REF,
-  TASKS_EXTENSION_ID,
-  errMsg,
-  failureCheck,
-  initRawSession,
-  skipCheck,
-  type RawSession,
-  waitForTerminal
-} from './helpers';
+import { SEP_2663_REF } from '../_shared/sep-refs';
+import { errMsg, failureCheck, skipCheck } from '../_shared/checks';
+import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { TASKS_EXTENSION_ID, waitForTerminal } from './helpers';
 
 export class TasksWireFieldsScenario implements ClientScenario {
   name = 'tasks-wire-fields';
@@ -165,7 +159,9 @@ export class TasksWireFieldsScenario implements ClientScenario {
       const description =
         'Task remains accessible via tasks/get for the duration of its ttlMs';
       if (!createdTaskId) {
-        checks.push(skipCheck(id, name, description, 'no task created'));
+        checks.push(
+          skipCheck(id, name, description, 'no task created', [SEP_2663_REF])
+        );
       } else {
         try {
           await waitForTerminal(session, createdTaskId);
@@ -212,7 +208,9 @@ export class TasksWireFieldsScenario implements ClientScenario {
         })) as any;
         const taskId = created.taskId;
         if (!taskId) {
-          checks.push(skipCheck(id, name, description, 'no task created'));
+          checks.push(
+            skipCheck(id, name, description, 'no task created', [SEP_2663_REF])
+          );
         } else {
           const terminal = await waitForTerminal(session, taskId);
           const errs: string[] = [];

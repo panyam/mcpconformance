@@ -19,17 +19,10 @@ import {
   ScenarioSource,
   ScenarioRunOptions
 } from '../../../types';
-import {
-  TASKS_EXTENSION_ID,
-  SEP_2663_REF,
-  SEP_2322_REF,
-  errMsg,
-  failureCheck,
-  initRawSession,
-  type RawSession,
-  skipCheck,
-  waitForTerminal
-} from './helpers';
+import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
+import { errMsg, failureCheck, skipCheck } from '../_shared/checks';
+import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { TASKS_EXTENSION_ID, waitForTerminal } from './helpers';
 import { isIso8601 } from '../_shared/wire-format';
 
 export class TasksLifecycleScenario implements ClientScenario {
@@ -234,7 +227,9 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
       const description =
         'tasks/get returns status + metadata for an active task';
       if (!workingTaskId) {
-        checks.push(skipCheck(id, name, description, 'no task created'));
+        checks.push(
+          skipCheck(id, name, description, 'no task created', [SEP_2663_REF])
+        );
       } else {
         try {
           const task = (await session.request('tasks/get', {
@@ -272,7 +267,9 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
       const description =
         'Completed task tasks/get inlines result with content[] (no separate tasks/result method)';
       if (!workingTaskId) {
-        checks.push(skipCheck(id, name, description, 'no task created'));
+        checks.push(
+          skipCheck(id, name, description, 'no task created', [SEP_2663_REF])
+        );
       } else {
         try {
           const terminal = await waitForTerminal(session, workingTaskId);
