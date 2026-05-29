@@ -30,7 +30,28 @@ import {
 import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
-import { TASKS_EXTENSION_ID, waitForStatus, waitForTerminal } from './helpers';
+import {
+  TASKS_EXTENSION_ID,
+  validTasksParams,
+  waitForStatus,
+  waitForTerminal
+} from './helpers';
+
+/**
+ * Diagnostic suffix for negative-path checks. When a server returns
+ * the wrong JSON-RPC error code, the most common cause (per the
+ * SEP-2663 review on conformance#262) is that the server validated
+ * some other dimension of the request first — routing headers,
+ * `_meta`, params shape — and short-circuited before reaching the
+ * code path the check is actually probing. The check fixture
+ * already sends an otherwise-valid envelope via `validTasksParams`
+ * + raw-session auto-headers, so a wrong code here usually means
+ * either the server has a different validation order than expected
+ * or the fixture envelope is still missing something this server
+ * requires. Mention both possibilities so the failure is debuggable.
+ */
+const ISOLATION_HINT =
+  '(if the server is otherwise compliant, verify it does not validate other dimensions — routing headers, _meta, params shape — before method dispatch)';
 
 export class TasksDispatchScenario implements ClientScenario {
   name = 'tasks-dispatch-and-envelope';
@@ -111,13 +132,18 @@ export class TasksDispatchScenario implements ClientScenario {
     }
 
     // Check 1: tasks/result removed.
+    //
+    // Isolation: the request body uses a v1-shaped { taskId } via
+    // validTasksParams, and the raw-session emits Mcp-Method +
+    // Mcp-Name routing headers and the standard _meta envelope. The
+    // ONLY thing the server should object to is the method name.
     {
       const id = 'tasks-removed-tasks-result';
       const name = 'TasksRemovedTasksResult';
       const description =
         'tasks/result is removed in v2 and MUST reject with -32601';
       try {
-        await session.request('tasks/result', { taskId: 'any' });
+        await session.request('tasks/result', validTasksParams('tasks/result'));
         checks.push({
           id,
           name,
@@ -130,7 +156,9 @@ export class TasksDispatchScenario implements ClientScenario {
       } catch (e: any) {
         const errs: string[] = [];
         if (e.code !== -32601) {
-          errs.push(`expected -32601; got ${e.code ?? '<missing>'}`);
+          errs.push(
+            `expected -32601; got ${e.code ?? '<missing>'} ${ISOLATION_HINT}`
+          );
         }
         checks.push({
           id,
@@ -145,13 +173,17 @@ export class TasksDispatchScenario implements ClientScenario {
     }
 
     // Check 2: tasks/list removed.
+    //
+    // Isolation: v1 tasks/list took no required params; the empty
+    // body is fully valid. Routing headers + _meta come from raw-
+    // session. Only the method name itself is wrong.
     {
       const id = 'tasks-removed-tasks-list';
       const name = 'TasksRemovedTasksList';
       const description =
         'tasks/list is removed in v2 and MUST reject with -32601';
       try {
-        await session.request('tasks/list', {});
+        await session.request('tasks/list', validTasksParams('tasks/list'));
         checks.push({
           id,
           name,
@@ -164,7 +196,9 @@ export class TasksDispatchScenario implements ClientScenario {
       } catch (e: any) {
         const errs: string[] = [];
         if (e.code !== -32601) {
-          errs.push(`expected -32601; got ${e.code ?? '<missing>'}`);
+          errs.push(
+            `expected -32601; got ${e.code ?? '<missing>'} ${ISOLATION_HINT}`
+          );
         }
         checks.push({
           id,
@@ -444,15 +478,25 @@ export class TasksDispatchScenario implements ClientScenario {
     }
 
     // Check 8: tasks/get with unknown taskId returns -32602.
+    //
+    // Isolation: tasks/get is a supported method; the taskId is the
+    // single property under test. The unknown taskId appears in both
+    // body and Mcp-Name header (raw-session mirrors it) so a server
+    // that validates routing headers first will route to tasks/get
+    // and reject for "unknown taskId" specifically — not for header
+    // mismatch.
     {
       const id = 'tasks-get-unknown-task-id-rejected';
       const name = 'TasksGetUnknownTaskIdRejected';
       const description =
         'tasks/get for a taskId the server does not recognize MUST return -32602';
       try {
-        await session.request('tasks/get', {
-          taskId: 'tasks-conformance-nonexistent-12345'
-        });
+        await session.request(
+          'tasks/get',
+          validTasksParams('tasks/get', {
+            taskId: 'tasks-conformance-nonexistent-12345'
+          })
+        );
         checks.push({
           id,
           name,
@@ -465,7 +509,9 @@ export class TasksDispatchScenario implements ClientScenario {
       } catch (e: any) {
         const errs: string[] = [];
         if (e.code !== -32602) {
-          errs.push(`expected -32602; got ${e.code ?? '<missing>'}`);
+          errs.push(
+            `expected -32602; got ${e.code ?? '<missing>'} ${ISOLATION_HINT}`
+          );
         }
         checks.push({
           id,

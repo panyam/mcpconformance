@@ -541,6 +541,7 @@ export function routingHeaders(
     case 'tasks/get':
     case 'tasks/update':
     case 'tasks/cancel':
+    case 'tasks/result':
       if (typeof params?.taskId === 'string') {
         headers['Mcp-Name'] = params.taskId;
       }
