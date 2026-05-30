@@ -138,7 +138,7 @@ export class TasksDispatchScenario implements ClientScenario {
     // Mcp-Name routing headers and the standard _meta envelope. The
     // ONLY thing the server should object to is the method name.
     {
-      const id = 'tasks-removed-tasks-result';
+      const id = 'sep-2663-tasks-result-removed-method-not-found';
       const name = 'TasksRemovedTasksResult';
       const description =
         'tasks/result is removed in v2 and MUST reject with -32601';
@@ -253,7 +253,7 @@ export class TasksDispatchScenario implements ClientScenario {
 
     // Check 4: legacy `task` param tolerated + ignored on sync tool.
     {
-      const id = 'tasks-legacy-task-param-ignored';
+      const id = 'sep-2663-legacy-task-param-ignored';
       const name = 'TasksLegacyTaskParamIgnored';
       const description =
         'tools/call with legacy `task` param against a sync tool MUST NOT error and MUST NOT be promoted to a task';
@@ -426,7 +426,7 @@ export class TasksDispatchScenario implements ClientScenario {
 
     // Check 7: strong consistency — immediate tasks/get after CreateTaskResult.
     {
-      const id = 'tasks-strong-consistency-immediate-get';
+      const id = 'sep-2663-durable-create-strong-consistency';
       const name = 'TasksStrongConsistencyImmediateGet';
       const description =
         'tasks/get issued immediately after CreateTaskResult arrives MUST resolve (server MUST NOT return CreateTaskResult before the task is durably created)';
@@ -486,7 +486,7 @@ export class TasksDispatchScenario implements ClientScenario {
     // and reject for "unknown taskId" specifically — not for header
     // mismatch.
     {
-      const id = 'tasks-get-unknown-task-id-rejected';
+      const id = 'sep-2663-tasks-get-invalid-task-id-32602';
       const name = 'TasksGetUnknownTaskIdRejected';
       const description =
         'tasks/get for a taskId the server does not recognize MUST return -32602';

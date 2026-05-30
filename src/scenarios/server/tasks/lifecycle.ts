@@ -146,7 +146,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
     // Check 2: server-directed task creation produces flat CreateTaskResult.
     let workingTaskId: string | undefined;
     {
-      const id = 'tasks-server-task-creation';
+      const id = 'sep-2663-result-type-task-on-create';
       const name = 'TasksServerTaskCreation';
       const description =
         'Task-supporting tool returns flat CreateTaskResult (no nested `task` wrapper)';
@@ -222,7 +222,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     // Check 3: tasks/get during working state returns status + metadata.
     {
-      const id = 'tasks-get-during-working';
+      const id = 'sep-2663-tasks-get-status-working';
       const name = 'TasksGetDuringWorking';
       const description =
         'tasks/get returns status + metadata for an active task';
@@ -262,7 +262,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     // Check 4: terminal tasks/get inlines result with content[].
     {
-      const id = 'tasks-get-terminal-inlined-result';
+      const id = 'sep-2663-tasks-get-status-completed';
       const name = 'TasksGetTerminalInlinedResult';
       const description =
         'Completed task tasks/get inlines result with content[] (no separate tasks/result method)';
@@ -313,7 +313,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     // Check 5: tool execution error → completed with isError:true.
     {
-      const id = 'tasks-tool-error-completed-iserror';
+      const id = 'sep-2663-tool-error-uses-completed-status';
       const name = 'TasksToolErrorCompletedIsError';
       const description =
         'Tool execution error reports as completed + result.isError (NOT failed)';
@@ -354,7 +354,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     // Check 6: protocol-level error → failed with inlined error, no result.
     {
-      const id = 'tasks-protocol-error-failed-shape';
+      const id = 'sep-2663-tasks-get-status-failed';
       const name = 'TasksProtocolErrorFailedShape';
       const description =
         'Protocol-level error reports as failed + inlined error{code,message}, no result';
@@ -404,7 +404,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
     // Check 7: tasks/cancel returns empty {resultType:"complete"} ack;
     // status settles to cancelled.
     {
-      const id = 'tasks-cancel-empty-ack';
+      const id = 'sep-2663-cancel-ack-empty-result';
       const name = 'TasksCancelEmptyAck';
       const description =
         'tasks/cancel returns {resultType:"complete"} ack; status settles to cancelled';

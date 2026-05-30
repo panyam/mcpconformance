@@ -87,7 +87,7 @@ export class TasksMRTRInputScenario implements ClientScenario {
 
     // Check 1: tasks/get surfaces inputRequests when status=input_required.
     {
-      const id = 'tasks-mrtr-input-requests-on-tasks-get';
+      const id = 'sep-2663-tasks-get-status-input-required';
       const name = 'TasksMRTRInputRequestsOnTasksGet';
       const description =
         'tasks/get on an input_required task MUST surface a non-empty inputRequests map';

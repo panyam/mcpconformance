@@ -128,7 +128,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
     // pattern — same code path as the required-task-error scenario and
     // (when implemented) subscriptions/listen for tasks.
     {
-      const id = 'tasks-methods-gated-without-extension';
+      const id = 'sep-2663-tasks-methods-non-declaring-32003';
       const name = 'TasksMethodsGatedWithoutExtension';
       const description =
         'tasks/get, tasks/update, tasks/cancel return -32003 when the client did not negotiate the tasks extension (SEP-2575 Missing Required Capabilities)';
@@ -166,7 +166,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
 
     // Check 3: tools/call without extension returns sync ToolResult, not task.
     {
-      const id = 'tasks-tools-call-without-extension-sync';
+      const id = 'sep-2663-server-rejects-undeclared-client';
       const name = 'TasksToolsCallWithoutExtensionSync';
       const description =
         'tools/call from a session without the extension MUST fall through to sync (no CreateTaskResult, even for task-supporting tools)';
