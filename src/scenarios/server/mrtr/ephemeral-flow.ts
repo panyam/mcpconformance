@@ -26,9 +26,10 @@ import {
   DRAFT_PROTOCOL_VERSION,
   ScenarioRunOptions
 } from '../../../types';
-import { SEP_2322_REF } from '../_shared/sep-refs';
+import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { TASKS_EXTENSION_ID, waitForTerminal } from '../tasks/helpers';
 import {
   MRTR_INPUT_REQUIRED_RESULT_TYPE,
   isCompleteResult,
@@ -504,41 +505,140 @@ Every \`tools/call\` response in the MRTR contract is one of:
       }
     }
 
-    // Check 8: SKIPPED — MRTR → Tasks composition.
-    // Tracking placeholder; spec made this normative in commit 451f5e1
-    // (Apr 30). Blocker: reference servers need a middleware that
-    // observes the handler's InputRequiredResult signal BEFORE creating
-    // a task — the natural implementation pattern (create task up-front,
-    // run handler in goroutine) doesn't expose the signal in time, so
-    // round 1 of an MRTR-composing tools/call ends up emitting
-    // CreateTaskResult instead of InputRequiredResult. Tracked in
-    // https://github.com/panyam/mcpkit/issues/347 as one example impl
-    // that hits this; SDKs in any language will need an equivalent fix.
+    // Check 8: SEP-2322 + SEP-2663 composition — MRTR loop gathers input,
+    // then the handler escalates to async on the final round and the server
+    // returns CreateTaskResult. Made normative by SEP-2663 commit 451f5e1
+    // (Apr 30).
     //
-    // (An earlier version of this skip also tracked a discriminator
-    // value blocker on "incomplete" vs "input_required". SEP-2322
-    // merged on 2026-05-06 with "input_required" (commit de6d76fb).
-    // SEP-2663's mdx hasn't yet caught up but every server emitting
-    // the merged 2322 literal is interoperable, so the blocker is
-    // effectively resolved for conformance purposes.)
+    // The fixture tool `test_tool_with_task` is registered with
+    // taskSupport=required. Round 1 returns InputRequiredResult asking for
+    // `user_name`; round 2 (with the elicit response echoed back) returns
+    // CreateTaskResult; the server's continuation goroutine completes the
+    // task and the inlined result is observed via tasks/get.
+    //
+    // Spec separation we MUST keep observable per SEP-2663:
+    //   1. Round 1 (MRTR) carries `inputRequests` + (optionally) `requestState`
+    //      and MUST NOT carry `taskId`.
+    //   2. Round 2 (CreateTaskResult) carries `taskId` + `status` and MUST NOT
+    //      carry `requestState` (the merged SEP-2663 removed it from the v2
+    //      wire shape; the MRTR phase's requestState does not leak into the
+    //      task envelope, so clients don't have to deduplicate across flows).
+    //   3. The final task `result` reflects the answer gathered during the
+    //      MRTR phase, end-to-end.
     {
-      checks.push({
-        id: 'mrtr-tasks-composition',
-        name: 'MrtrTasksComposition',
-        description:
-          "MRTR loop gathers input then final round returns CreateTaskResult (SEP-2663 451f5e1). Deferred on the reference-impl middleware refactor — the eager-task-creation pattern emits CreateTaskResult before the handler runs, so the handler's IsInputRequired signal can't be surfaced as InputRequiredResult on round 1. Tracked at panyam/mcpkit issue 347.",
-        status: 'SKIPPED',
-        timestamp: new Date().toISOString(),
-        errorMessage:
-          "Skipped: deferred on the reference-impl middleware refactor (panyam/mcpkit issue 347). The current eager-task-creation pattern emits CreateTaskResult before the handler runs, so the handler's IsInputRequired signal can't be surfaced as InputRequiredResult on round 1.",
-        specReferences: [
-          SEP_2322_REF,
-          {
-            id: 'SEP-2663',
-            url: 'https://github.com/modelcontextprotocol/specification/pull/2663'
+      const id = 'sep-2663-mrtr-synchronous-before-task-creation';
+      const name = 'Sep2663MrtrSynchronousBeforeTaskCreation';
+      const description =
+        'MRTR loop gathers input then escalates to a task on the final round (SEP-2322 + SEP-2663 451f5e1).';
+      const specRefs = [SEP_2322_REF, SEP_2663_REF];
+      let compSession: RawSession | undefined;
+      try {
+        // The other checks above used a session without negotiating the
+        // tasks extension. Round 2's CreateTaskResult requires the client to
+        // declare io.modelcontextprotocol/tasks (SEP-2663), so we open a
+        // dedicated session for this check.
+        compSession = await initRawSession(serverUrl, {
+          stateless: opts?.stateless,
+          capabilities: {
+            elicitation: {},
+            extensions: { [TASKS_EXTENSION_ID]: {} }
           }
-        ]
-      });
+        });
+
+        // Round 1: MRTR — no inputResponses. Expect InputRequiredResult.
+        const r1 = (await compSession.request('tools/call', {
+          name: 'test_tool_with_task',
+          arguments: {}
+        })) as any;
+        const errs: string[] = [];
+        if (!isInputRequiredResult(r1)) {
+          errs.push(
+            `round 1 MUST be InputRequiredResult; got ${JSON.stringify(r1)}`
+          );
+        }
+        if (r1?.resultType !== MRTR_INPUT_REQUIRED_RESULT_TYPE) {
+          errs.push(
+            `round 1 resultType MUST be "${MRTR_INPUT_REQUIRED_RESULT_TYPE}"; got ${JSON.stringify(r1?.resultType)}`
+          );
+        }
+        if (r1 && 'taskId' in r1) {
+          errs.push(
+            'round 1 (MRTR) MUST NOT carry taskId — task is only minted on the final round'
+          );
+        }
+        const key = Object.keys(r1?.inputRequests ?? {})[0];
+        if (!key) {
+          errs.push('round 1 missing inputRequests; cannot drive round 2');
+        }
+
+        // Round 2: MRTR retry with the elicit response. The handler now
+        // returns GoAsync, so the server MUST return CreateTaskResult.
+        let taskId: string | undefined;
+        let r2: any;
+        if (key) {
+          r2 = (await compSession.request('tools/call', {
+            name: 'test_tool_with_task',
+            arguments: {},
+            inputResponses: {
+              [key]: mockElicitResponse({ name: 'Alice' })
+            },
+            ...(r1.requestState !== undefined
+              ? { requestState: r1.requestState }
+              : {})
+          })) as any;
+          if (r2?.resultType !== 'task') {
+            errs.push(
+              `round 2 MUST be CreateTaskResult (resultType:"task"); got ${JSON.stringify(r2?.resultType)}`
+            );
+          }
+          if (!r2?.taskId) {
+            errs.push('round 2 CreateTaskResult MUST carry top-level taskId');
+          } else {
+            taskId = r2.taskId;
+          }
+          if (r2 && 'requestState' in r2) {
+            errs.push(
+              'round 2 CreateTaskResult MUST NOT carry requestState (SEP-2663 spec separation — MRTR requestState does not leak into the task envelope)'
+            );
+          }
+          if (r2 && 'inputRequests' in r2) {
+            errs.push(
+              'round 2 CreateTaskResult MUST NOT carry inputRequests (those belong on DetailedTask returned by tasks/get)'
+            );
+          }
+        }
+
+        // Round 3: poll tasks/get until terminal; assert the inlined result
+        // reflects the answer gathered in the MRTR phase.
+        if (taskId) {
+          const terminal = await waitForTerminal(compSession, taskId);
+          if (terminal.status !== 'completed') {
+            errs.push(
+              `final task status MUST be "completed"; got ${JSON.stringify(terminal.status)}`
+            );
+          }
+          const text = terminal?.result?.content?.[0]?.text ?? '';
+          if (!/Alice/.test(text)) {
+            errs.push(
+              `final task result MUST reflect the user_name gathered during the MRTR phase (expected "Alice"); got ${JSON.stringify(text)}`
+            );
+          }
+        }
+
+        checks.push({
+          id,
+          name,
+          description,
+          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+          specReferences: specRefs
+        });
+      } catch (error) {
+        checks.push(failureCheck(id, name, description, error, specRefs));
+      } finally {
+        await compSession?.close().catch(() => {});
+      }
     }
 
     await session.close().catch(() => {});

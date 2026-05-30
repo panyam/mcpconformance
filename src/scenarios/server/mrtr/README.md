@@ -10,10 +10,10 @@ without creating a task envelope. The variant was renamed from
 
 ## Specs covered
 
-| SEP      | What it adds                                                                                                     | Where it shows up             |
-| -------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| SEP-2322 | Ephemeral MRTR — `resultType` discriminator, `inputRequests` / `inputResponses` keyed maps, `requestState` token | every check                   |
-| SEP-2663 | MRTR → Tasks composition (final round returns `CreateTaskResult`)                                                | mrtr-08 (SKIPPED — see below) |
+| SEP      | What it adds                                                                                                     | Where it shows up                                |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| SEP-2322 | Ephemeral MRTR — `resultType` discriminator, `inputRequests` / `inputResponses` keyed maps, `requestState` token | every check                                      |
+| SEP-2663 | MRTR → Tasks composition (final round returns `CreateTaskResult`)                                                | `sep-2663-mrtr-synchronous-before-task-creation` |
 
 ## ClientScenario classes
 
@@ -24,16 +24,16 @@ AGENTS.md "fewer scenarios, more checks" rule. A server that
 implemented elicitation round-trips but not sampling round-trips would
 be incoherent, so they bundle.
 
-| Check                                    | What it tests                                                                                                                      |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `mrtr-basic-elicitation-round-trip`      | Round 1 returns `InputRequiredResult` with `elicitation/create`; round 2 completes with the answer reflected                       |
-| `mrtr-sampling-round-trip`               | Same flow with `sampling/createMessage`                                                                                            |
-| `mrtr-roots-list-round-trip`             | Same flow with `roots/list`                                                                                                        |
-| `mrtr-request-state-round-trip`          | When server emits `requestState`, it's a non-empty string and the server validates the echo                                        |
-| `mrtr-multiple-input-requests-one-round` | A single `InputRequiredResult` MAY carry inputRequests for `elicitation/create` + `sampling/createMessage` + `roots/list` together |
-| `mrtr-multi-round-flow`                  | A handler MAY take 2+ rounds; each round mints a fresh `requestState`; final result reflects answers from every round              |
-| `mrtr-wrong-input-key-rerequests`        | When client sends a wrong `inputResponses` key, server SHOULD re-request via `InputRequiredResult` rather than erroring            |
-| `mrtr-tasks-composition`                 | **SKIPPED** — see "Open issues" below                                                                                              |
+| Check                                            | What it tests                                                                                                                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mrtr-basic-elicitation-round-trip`              | Round 1 returns `InputRequiredResult` with `elicitation/create`; round 2 completes with the answer reflected                                                                        |
+| `mrtr-sampling-round-trip`                       | Same flow with `sampling/createMessage`                                                                                                                                             |
+| `mrtr-roots-list-round-trip`                     | Same flow with `roots/list`                                                                                                                                                         |
+| `mrtr-request-state-round-trip`                  | When server emits `requestState`, it's a non-empty string and the server validates the echo                                                                                         |
+| `mrtr-multiple-input-requests-one-round`         | A single `InputRequiredResult` MAY carry inputRequests for `elicitation/create` + `sampling/createMessage` + `roots/list` together                                                  |
+| `mrtr-multi-round-flow`                          | A handler MAY take 2+ rounds; each round mints a fresh `requestState`; final result reflects answers from every round                                                               |
+| `mrtr-wrong-input-key-rerequests`                | When client sends a wrong `inputResponses` key, server SHOULD re-request via `InputRequiredResult` rather than erroring                                                             |
+| `sep-2663-mrtr-synchronous-before-task-creation` | MRTR → Tasks composition: handler exchanges `InputRequiredResult` rounds first, then returns `CreateTaskResult` on a subsequent round (SEP-2663 §"Task Creation", commit `451f5e1`) |
 
 ## Required server fixtures
 
@@ -65,40 +65,6 @@ MRTR_SERVER_URL=http://localhost:18093/mcp \
 MRTR_SERVER_CMD="/path/to/mrtr-server --port 18093" \
   npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts
 ```
-
-## Open issues
-
-### `mrtr-tasks-composition` deferred
-
-SEP-2663 commit `451f5e1` (Apr 30) made the MRTR → Tasks composition
-flow normative: a `tools/call` MAY exchange `InputRequiredResult` rounds
-to gather input, then return `CreateTaskResult` to go async on a
-subsequent round. Two blockers prevent enabling the check today:
-
-1. **Spec watch — discriminator value.** SEP-2322 merged on 2026-05-06
-   with `"input_required"` (commit `de6d76fb` renamed the variant from
-   IncompleteResult / `"incomplete"` per dsp-ant request). SEP-2663's
-   PR head (82fb2c4d as of 2026-05-07 PM) still reads `"incomplete"`
-   on line 121 of the mdx — Caitie's 5/15 RC commitment (issue
-   comment 4384052694) tracks the alignment. The constant lives in
-   `MRTR_INPUT_REQUIRED_RESULT_TYPE` (helpers.ts) so it's a one-line
-   flip if SEP-2663's eventual alignment surprises us.
-
-2. **Reference-impl gap.** The natural server-side implementation
-   pattern for tasks (mint task up-front, run handler in a goroutine /
-   async task) means the handler's `InputRequiredResult` signal isn't
-   visible to the middleware in time — by the time the handler returns
-   `IsInputRequired`, the `CreateTaskResult` is already on the wire. SDKs
-   in any language need an inverted middleware pattern that runs the
-   first round synchronously and only spins up the task once the
-   handler signals async-promotion.
-   ([panyam/mcpkit issue 347](https://github.com/panyam/mcpkit/issues/347)
-   tracks this for one example impl; SDKs in any language hit the
-   same architectural choice.)
-
-The check is registered with `status: 'SKIPPED'` so it's discoverable
-but doesn't fail conformance runs. When both blockers resolve, remove
-the SKIPPED short-circuit in `ephemeral-flow.ts` Check 8.
 
 ## Design notes
 
