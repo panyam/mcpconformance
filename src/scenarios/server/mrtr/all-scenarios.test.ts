@@ -24,8 +24,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MrtrEphemeralFlowScenario } from './ephemeral-flow';
-import { parseWireModes, type WireMode } from '../_shared/wire-mode';
+import { effectiveWireModes, type WireMode } from '../_shared/wire-mode';
 import { waitForServerReady } from '../_shared/test-runner';
+import { DRAFT_PROTOCOL_VERSION } from '../../../types';
 
 const SERVER_URL = process.env.MRTR_SERVER_URL;
 const SERVER_CMD = process.env.MRTR_SERVER_CMD;
@@ -36,11 +37,14 @@ const HAVE_TARGET = Boolean(SERVER_URL);
 const MRTR_SCENARIOS = [new MrtrEphemeralFlowScenario()];
 
 // SEP-2322 ephemeral MRTR (InputRequiredResult on tools/call) is
-// wire-independent in spec. parseWireModes returns both wires by
-// default; pin via MCP_WIRE_MODES=legacy or =stateless when an SDK
-// has only one wire implemented. Same parser drives the tasks
-// harness.
-const WIRE_MODES: WireMode[] = parseWireModes();
+// wire-independent in spec. effectiveWireModes returns the modes
+// the spec actually permits for the target protocol version — on
+// DRAFT-2026-v1 the legacy initialize handshake is removed
+// (SEP-2575 Accepted), so the helper drops it and we only emit
+// stateless traffic. Pin via MCP_WIRE_MODES=legacy or =stateless
+// when an SDK has only one wire implemented. Same helper drives
+// the tasks harness.
+const WIRE_MODES: WireMode[] = effectiveWireModes(DRAFT_PROTOCOL_VERSION);
 
 // describe.each / it.each table shape: tuple of (label, statelessFlag) so
 // vitest reports the wire as a clean parameter row.

@@ -38,8 +38,9 @@ import { TasksRequestHeadersScenario } from './headers';
 import { TasksDispatchScenario } from './dispatch';
 import { TasksStatusNotificationsScenario } from './notifications';
 import { TasksRequiredTaskErrorScenario } from './required-task-error';
-import { parseWireModes, type WireMode } from '../_shared/wire-mode';
+import { effectiveWireModes, type WireMode } from '../_shared/wire-mode';
 import { waitForServerReady } from '../_shared/test-runner';
+import { DRAFT_PROTOCOL_VERSION } from '../../../types';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
 const SERVER_CMD = process.env.TASKS_SERVER_CMD;
@@ -61,10 +62,13 @@ const TASKS_SCENARIOS = [
 
 // Tasks behavior is wire-independent in spec: SEP-2663 semantics
 // hold on both the legacy session wire AND the SEP-2575 stateless
-// wire. parseWireModes returns both by default; pin via
+// wire. effectiveWireModes returns the modes the spec actually
+// permits for the target protocol version — on DRAFT-2026-v1 the
+// legacy initialize handshake is removed (SEP-2575 Accepted), so the
+// helper drops it and we only emit stateless traffic. Pin via
 // MCP_WIRE_MODES=legacy or =stateless when an SDK has only one wire
-// implemented. The same parser drives the mrtr harness.
-const WIRE_MODES: WireMode[] = parseWireModes();
+// implemented. The same helper drives the mrtr harness.
+const WIRE_MODES: WireMode[] = effectiveWireModes(DRAFT_PROTOCOL_VERSION);
 
 // describe.each / it.each table shape: tuple of (label, statelessFlag) so
 // vitest reports the wire as a clean parameter row (`legacy wire`,
