@@ -327,6 +327,10 @@ program
     '--spec-version <version>',
     'Filter scenarios by spec version (cumulative for date versions)'
   )
+  .option(
+    '--force',
+    'Run a scenario even if it is not applicable at the requested --spec-version'
+  )
   .option('--verbose', 'Show verbose output (JSON instead of pretty print)')
   .action(async (options) => {
     try {
@@ -344,8 +348,16 @@ program
         const result = await runServerConformanceTest(
           validated.url,
           validated.scenario,
-          outputDir
+          outputDir,
+          specVersionFilter,
+          options.force ?? false
         );
+
+        // Inapplicable scenario/spec-version combination (already logged by
+        // the runner). Not a failure: exit 0.
+        if (result.skipped) {
+          process.exit(0);
+        }
 
         const { failed } = printServerResults(
           result.checks,
@@ -410,7 +422,8 @@ program
             const result = await runServerConformanceTest(
               validated.url,
               scenarioName,
-              outputDir
+              outputDir,
+              specVersionFilter
             );
             allResults.push({ scenario: scenarioName, checks: result.checks });
           } catch (error) {

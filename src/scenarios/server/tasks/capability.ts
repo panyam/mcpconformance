@@ -13,9 +13,9 @@
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSource,
-  ScenarioRunOptions
+  ScenarioSource
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 import { SEP_2575_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
@@ -52,10 +52,8 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
   The server MUST honor the per-request opt-in and produce a
   \`CreateTaskResult\` for that call.`;
 
-  async run(
-    serverUrl: string,
-    opts?: ScenarioRunOptions
-  ): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     // Two parallel sessions: one declares the extension, one does NOT.
@@ -63,7 +61,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
     let withoutExt: RawSession;
     try {
       withExt = await initRawSession(serverUrl, {
-        stateless: opts?.stateless,
+        stateless: ctx.wire === 'stateless',
         capabilities: {
           elicitation: {},
           sampling: {},
@@ -71,7 +69,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
         }
       });
       withoutExt = await initRawSession(serverUrl, {
-        stateless: opts?.stateless,
+        stateless: ctx.wire === 'stateless',
         capabilities: {}
       });
     } catch (error) {

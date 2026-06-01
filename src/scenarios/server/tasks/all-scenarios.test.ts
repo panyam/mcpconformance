@@ -41,6 +41,8 @@ import { TasksRequiredTaskErrorScenario } from './required-task-error';
 import { effectiveWireModes, type WireMode } from '../_shared/wire-mode';
 import { waitForServerReady } from '../_shared/test-runner';
 import { DRAFT_PROTOCOL_VERSION } from '../../../types';
+import type { RunContext } from '../../../connection';
+import { testContext } from '../../../connection/testing';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
 const SERVER_CMD = process.env.TASKS_SERVER_CMD;
@@ -142,7 +144,11 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
     it.each(TASKS_SCENARIOS)(
       '$name — all checks succeed against fixture',
       async (scenario) => {
-        const checks = await scenario.run(SERVER_URL!, { stateless });
+        const ctx: RunContext = {
+          ...testContext(SERVER_URL!, DRAFT_PROTOCOL_VERSION),
+          wire: stateless ? 'stateless' : 'legacy'
+        };
+        const checks = await scenario.run(ctx);
         expect(checks.length).toBeGreaterThan(0);
         const failures = checks.filter(
           (c) => c.status === 'FAILURE' || c.status === 'WARNING'

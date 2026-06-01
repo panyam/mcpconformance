@@ -27,6 +27,8 @@ import { MrtrEphemeralFlowScenario } from './ephemeral-flow';
 import { effectiveWireModes, type WireMode } from '../_shared/wire-mode';
 import { waitForServerReady } from '../_shared/test-runner';
 import { DRAFT_PROTOCOL_VERSION } from '../../../types';
+import type { RunContext } from '../../../connection';
+import { testContext } from '../../../connection/testing';
 
 const SERVER_URL = process.env.MRTR_SERVER_URL;
 const SERVER_CMD = process.env.MRTR_SERVER_CMD;
@@ -117,7 +119,11 @@ describeIfTarget('SEP-2322 MRTR — server conformance', () => {
     it.each(MRTR_SCENARIOS)(
       '$name — all checks succeed against fixture',
       async (scenario) => {
-        const checks = await scenario.run(SERVER_URL!, { stateless });
+        const ctx: RunContext = {
+          ...testContext(SERVER_URL!, DRAFT_PROTOCOL_VERSION),
+          wire: stateless ? 'stateless' : 'legacy'
+        };
+        const checks = await scenario.run(ctx);
         expect(checks.length).toBeGreaterThan(0);
         const failures = checks.filter(
           (c) => c.status === 'FAILURE' || c.status === 'WARNING'

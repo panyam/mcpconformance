@@ -20,7 +20,11 @@ import {
   ConformanceCheck,
   DRAFT_PROTOCOL_VERSION
 } from '../../types';
-import { withRequestMeta, sendStatelessRequest } from './stateless-client';
+import {
+  withRequestMeta,
+  sendStatelessRequest,
+  type RunContext
+} from '../../connection';
 
 const SPEC_REFERENCE = {
   id: 'SEP-2243-Server-Validation',
@@ -262,7 +266,8 @@ export class HttpHeaderValidationScenario implements ClientScenario {
 - Server MUST return HTTP 400 Bad Request for validation failures
 - Server MUST return JSON-RPC error with code -32001 (HeaderMismatch)`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     try {
@@ -557,7 +562,8 @@ export class HttpCustomHeaderServerValidationScenario implements ClientScenario 
 - Server MUST treat values without =?base64?...?= wrapper as literal
 - Server MUST reject requests where custom header is omitted but value is in body`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     try {

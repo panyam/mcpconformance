@@ -21,6 +21,7 @@ import {
   ConformanceCheck,
   ScenarioSource
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 import { SEP_2663_REF } from '../_shared/sep-refs';
 import { skipCheck } from '../_shared/checks';
 
@@ -42,7 +43,7 @@ them or not. When sent, the notification params MUST carry:
   notifications MAY inline the corresponding \`result\` or \`error\`
   per the SEP-2663 DetailedTask shape.`;
 
-  async run(_serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(_ctx: RunContext): Promise<ConformanceCheck[]> {
     // Prior implementation (POST-SSE observation harness on tools/call)
     // was removed in this commit; see git blame for the working code to
     // adapt when rewriting against subscriptions/listen.

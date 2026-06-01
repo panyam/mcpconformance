@@ -13,9 +13,9 @@
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSource,
-  ScenarioRunOptions
+  ScenarioSource
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 import { SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck, skipCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
@@ -50,16 +50,14 @@ export class TasksWireFieldsScenario implements ClientScenario {
   at the root level of the \`tasks/get\` response, so the metadata is
   redundant.`;
 
-  async run(
-    serverUrl: string,
-    opts?: ScenarioRunOptions
-  ): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: opts?.stateless,
+        stateless: ctx.wire === 'stateless',
         capabilities: {
           extensions: { [TASKS_EXTENSION_ID]: {} }
         }

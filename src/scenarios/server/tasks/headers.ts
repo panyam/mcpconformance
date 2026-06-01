@@ -25,9 +25,9 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import {
   ClientScenario,
   ConformanceCheck,
-  ScenarioSource,
-  ScenarioRunOptions
+  ScenarioSource
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 import { SEP_2243_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
@@ -61,16 +61,14 @@ Failure Conditions", both missing required headers and mismatched
 values trigger rejection with JSON-RPC error code \`-32001\`
 (HeaderMismatch) and HTTP 400.`;
 
-  async run(
-    serverUrl: string,
-    opts?: ScenarioRunOptions
-  ): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: opts?.stateless,
+        stateless: ctx.wire === 'stateless',
         capabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
       });
     } catch (error) {

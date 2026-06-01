@@ -1,17 +1,28 @@
 /**
- * Stateless request helpers for server scenarios (SEP-2575 + SEP-2243).
+ * Stateless connection: 2026-x lifecycle (SEP-2575).
  *
- * Every request the harness sends to a server under test carries the
- * cross-cutting obligations regardless of what a scenario actually tests:
- * the standard headers (MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept)
- * and the `_meta` fields (protocolVersion, clientInfo, clientCapabilities),
- * pinned to `DRAFT_PROTOCOL_VERSION`. Scenarios exercising these SEPs MUST
- * build their requests through these helpers so a strictly-conformant server
- * never rejects harness traffic for reasons unrelated to the behaviour under
- * test (issues #311, #312, #315).
+ * No handshake. Every request carries `_meta` with protocolVersion, clientInfo,
+ * and clientCapabilities, plus the standard headers (MCP-Protocol-Version,
+ * Mcp-Method, Mcp-Name per SEP-2243). Implemented with raw fetch so the
+ * conformance suite can test draft spec versions before the SDK supports them.
+ *
+ * Exports two layers:
+ * - `sendStatelessRequest()` — low-level: returns `{status, headers, body,
+ *   events}` and never throws on JSON-RPC errors. Scenarios that assert on
+ *   HTTP status or error codes use this directly.
+ * - `connectStateless()` — high-level: a `Connection` whose `request()` calls
+ *   `sendStatelessRequest()` and throws `JsonRpcError` on error responses.
+ *   The runner picks this via `connectFor()` for `--spec-version draft`.
+ *
+ * Both build their requests through `buildStandardHeaders()` and
+ * `withRequestMeta()` so a strictly-conformant server never rejects harness
+ * traffic for reasons unrelated to the behaviour under test
+ * (issues #311, #312, #315).
  */
 
-import { DRAFT_PROTOCOL_VERSION } from '../../types';
+import { DRAFT_PROTOCOL_VERSION, type SpecVersion } from '../types';
+import type { JSONRPCNotification } from '../spec-types/2025-11-25';
+import { JsonRpcError, type Connection } from './index';
 
 export interface JsonRpcResponse {
   jsonrpc: '2.0';
@@ -67,16 +78,18 @@ export function mcpNameForRequest(
  * Accept (both content types), MCP-Protocol-Version, Mcp-Method and (when the
  * method carries one) Mcp-Name. `options.headers` overrides or extends the
  * defaults, replacing any default whose name matches case-insensitively.
+ * `options.specVersion` sets the MCP-Protocol-Version header (default: draft),
+ * so scenarios can send the spec version the run was invoked with.
  */
 export function buildStandardHeaders(
   method: string,
   params?: Record<string, unknown>,
-  options: { headers?: Record<string, string> } = {}
+  options: { headers?: Record<string, string>; specVersion?: SpecVersion } = {}
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
-    'MCP-Protocol-Version': DRAFT_PROTOCOL_VERSION,
+    'MCP-Protocol-Version': options.specVersion ?? DRAFT_PROTOCOL_VERSION,
     'Mcp-Method': method
   };
   const name = mcpNameForRequest(method, params);
@@ -102,14 +115,16 @@ export function buildStandardHeaders(
 /**
  * Merge params with the conformant `_meta` required on every stateless
  * request. Keys already present in `params._meta` win over the defaults.
+ * `specVersion` sets the declared protocolVersion (default: draft).
  */
 export function withRequestMeta(
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
+  specVersion: SpecVersion = DRAFT_PROTOCOL_VERSION
 ): Record<string, unknown> {
   return {
     ...params,
     _meta: {
-      'io.modelcontextprotocol/protocolVersion': DRAFT_PROTOCOL_VERSION,
+      'io.modelcontextprotocol/protocolVersion': specVersion,
       'io.modelcontextprotocol/clientInfo': CONFORMANCE_CLIENT_INFO,
       'io.modelcontextprotocol/clientCapabilities': DEFAULT_CLIENT_CAPABILITIES,
       ...(params?._meta as Record<string, unknown> | undefined)
@@ -214,17 +229,22 @@ export async function sendStatelessRequest(
   serverUrl: string,
   method: string,
   params?: Record<string, unknown>,
-  options: { headers?: Record<string, string>; timeoutMs?: number } = {}
+  options: {
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+    specVersion?: SpecVersion;
+  } = {}
 ): Promise<StatelessResponse> {
   const id = nextRequestId++;
   const headers = buildStandardHeaders(method, params, {
-    headers: options.headers
+    headers: options.headers,
+    specVersion: options.specVersion
   });
   const body = JSON.stringify({
     jsonrpc: '2.0',
     id,
     method,
-    params: withRequestMeta(params)
+    params: withRequestMeta(params, options.specVersion)
   });
 
   const controller = new AbortController();
@@ -271,4 +291,68 @@ export async function sendStatelessRequest(
     // Tear down any still-open SSE stream so sockets don't linger.
     controller.abort();
   }
+}
+
+/**
+ * `Connection` impl for the 2026-x stateless lifecycle. Thin wrapper over
+ * `sendStatelessRequest()`: classifies SSE-stream events into the notification
+ * sink, surfaces server→client *requests* on the response stream as a spec
+ * violation, and throws `JsonRpcError` on error responses.
+ */
+export async function connectStateless(
+  serverUrl: string,
+  specVersion: SpecVersion = DRAFT_PROTOCOL_VERSION
+): Promise<Connection> {
+  const notifications: JSONRPCNotification[] = [];
+
+  async function request<R>(
+    method: string,
+    params?: Record<string, unknown>
+  ): Promise<R> {
+    const response = await sendStatelessRequest(serverUrl, method, params, {
+      specVersion
+    });
+
+    for (const event of response.events ?? []) {
+      if (typeof event !== 'object' || event === null) continue;
+      if ('method' in event && !('id' in event)) {
+        notifications.push(event as JSONRPCNotification);
+      } else if ('method' in event && 'id' in event) {
+        throw new JsonRpcError(
+          -32600,
+          `Server sent request '${(event as { method: string }).method}' on response stream; stateless lifecycle forbids this (use MRTR)`
+        );
+      }
+    }
+
+    const rpcError = response.body?.error;
+    // Only a properly-shaped JSON-RPC error becomes a JsonRpcError; anything
+    // else (e.g. a proxy's `{"error": "upstream timeout"}`) falls through so
+    // the HTTP status and raw body are surfaced below.
+    if (
+      typeof rpcError === 'object' &&
+      rpcError !== null &&
+      typeof rpcError.code === 'number'
+    ) {
+      throw new JsonRpcError(rpcError.code, rpcError.message, rpcError.data);
+    }
+    if (response.body?.result === undefined) {
+      throw new Error(
+        `HTTP ${response.status}: ` +
+          `expected a JSON-RPC result for '${method}', got ` +
+          (response.text !== undefined
+            ? `non-JSON body (content-type ${response.contentType ?? '(none)'})`
+            : response.body !== undefined
+              ? `unexpected body ${JSON.stringify(response.body)}`
+              : 'no result in response body')
+      );
+    }
+    return response.body.result as R;
+  }
+
+  return {
+    notifications,
+    request,
+    close: async () => {}
+  };
 }

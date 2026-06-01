@@ -23,9 +23,9 @@ import {
   ClientScenario,
   ConformanceCheck,
   ScenarioSource,
-  DRAFT_PROTOCOL_VERSION,
-  ScenarioRunOptions
+  DRAFT_PROTOCOL_VERSION
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
@@ -84,16 +84,14 @@ Every \`tools/call\` response in the MRTR contract is one of:
   rather than erroring. (The spec is soft here; this scenario asserts
   the re-request path.)`;
 
-  async run(
-    serverUrl: string,
-    opts?: ScenarioRunOptions
-  ): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: opts?.stateless,
+        stateless: ctx.wire === 'stateless',
         capabilities: {
           elicitation: {},
           sampling: {},
@@ -538,7 +536,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
         // declare io.modelcontextprotocol/tasks (SEP-2663), so we open a
         // dedicated session for this check.
         compSession = await initRawSession(serverUrl, {
-          stateless: opts?.stateless,
+          stateless: ctx.wire === 'stateless',
           capabilities: {
             elicitation: {},
             extensions: { [TASKS_EXTENSION_ID]: {} }
