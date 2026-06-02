@@ -22,6 +22,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck, skipCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID, waitForTerminal } from './helpers';
 import { isIso8601 } from '../_shared/wire-format';
 
@@ -78,7 +79,7 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {
           elicitation: {},
           sampling: {},

@@ -49,14 +49,6 @@ export interface RunContext {
    * GET-SSE, DNS rebinding) bypass this and use raw fetch.
    */
   connect(): Promise<Connection>;
-  /**
-   * Wire mode override for suites that exercise both the legacy and
-   * SEP-2575 stateless wires against a single spec version (notably
-   * SEP-2663 tasks and SEP-2322 MRTR). When absent the wire is implied
-   * by `specVersion` — `2025-x` ⇒ legacy, draft ⇒ stateless. Scenarios
-   * outside the tasks/mrtr suites ignore this knob.
-   */
-  wire?: 'legacy' | 'stateless';
 }
 
 export class JsonRpcError extends Error {

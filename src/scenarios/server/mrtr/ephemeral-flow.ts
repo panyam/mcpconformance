@@ -29,6 +29,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2322_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID, waitForTerminal } from '../tasks/helpers';
 import {
   MRTR_INPUT_REQUIRED_RESULT_TYPE,
@@ -91,7 +92,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {
           elicitation: {},
           sampling: {},
@@ -536,7 +537,7 @@ Every \`tools/call\` response in the MRTR contract is one of:
         // declare io.modelcontextprotocol/tasks (SEP-2663), so we open a
         // dedicated session for this check.
         compSession = await initRawSession(serverUrl, {
-          stateless: ctx.wire === 'stateless',
+          stateless: isStateless(ctx),
           capabilities: {
             elicitation: {},
             extensions: { [TASKS_EXTENSION_ID]: {} }

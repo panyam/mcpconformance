@@ -3,7 +3,9 @@
  * skipping (an explicitly-requested version outside a scenario's window
  * skips rather than silently testing something else; --force overrides).
  */
-import { describe, test, expect } from 'vitest';
+import http from 'http';
+import type { AddressInfo } from 'net';
+import { afterEach, beforeEach, describe, test, expect } from 'vitest';
 import { runServerConformanceTest } from './server';
 import { DRAFT_PROTOCOL_VERSION, LATEST_SPEC_VERSION } from '../types';
 
@@ -49,4 +51,73 @@ describe('runServerConformanceTest spec-version applicability', () => {
     expect(result.skipped).toBeUndefined();
     expect(result.checks.length).toBeGreaterThan(0);
   }, 60000);
+});
+
+describe('runServerConformanceTest wire selection for draft-only scenarios', () => {
+  // Regression: the CLI used to silently emit the legacy initialize+session
+  // wire when running a draft-only scenario, producing requests with no
+  // `_meta.io.modelcontextprotocol/*` envelope (and `initialize` rather
+  // than `server/discover`). Deriving wire from spec version on the
+  // RunContext makes the CLI emit SEP-2575 stateless traffic on draft.
+  let server: http.Server;
+  let url: string;
+  const captured: Array<{ method?: string; params?: Record<string, unknown> }> =
+    [];
+
+  beforeEach(async () => {
+    captured.length = 0;
+    server = http.createServer((req, res) => {
+      let buf = '';
+      req.on('data', (chunk) => {
+        buf += chunk;
+      });
+      req.on('end', () => {
+        let id: unknown = null;
+        try {
+          const body = JSON.parse(buf);
+          captured.push({ method: body.method, params: body.params });
+          id = body.id ?? null;
+        } catch {
+          // non-JSON body — record nothing
+        }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32603, message: 'mock server: scenario aborted' }
+          })
+        );
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve)
+    );
+    const port = (server.address() as AddressInfo).port;
+    url = `http://127.0.0.1:${port}/mcp`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  test('emits SEP-2575 stateless wire (server/discover + _meta envelope) on tasks-lifecycle', async () => {
+    await runServerConformanceTest(url, 'tasks-lifecycle');
+
+    expect(captured.length).toBeGreaterThan(0);
+    const first = captured[0];
+
+    // The legacy wire would send `initialize` here; SEP-2575 replaces
+    // the handshake with `server/discover`.
+    expect(first.method).toBe('server/discover');
+
+    const meta = first.params?._meta as Record<string, unknown> | undefined;
+    expect(meta).toBeDefined();
+    expect(meta?.['io.modelcontextprotocol/protocolVersion']).toBe(
+      DRAFT_PROTOCOL_VERSION
+    );
+    expect(meta?.['io.modelcontextprotocol/clientInfo']).toBeDefined();
+    expect(meta?.['io.modelcontextprotocol/clientCapabilities']).toBeDefined();
+  }, 30000);
 });

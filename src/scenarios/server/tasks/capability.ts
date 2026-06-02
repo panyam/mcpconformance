@@ -19,6 +19,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2575_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID } from './helpers';
 
 export class TasksCapabilityNegotiationScenario implements ClientScenario {
@@ -61,7 +62,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
     let withoutExt: RawSession;
     try {
       withExt = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {
           elicitation: {},
           sampling: {},
@@ -69,7 +70,7 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
         }
       });
       withoutExt = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {}
       });
     } catch (error) {

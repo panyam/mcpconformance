@@ -19,6 +19,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck, skipCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID, waitForTerminal } from './helpers';
 
 export class TasksWireFieldsScenario implements ClientScenario {
@@ -57,7 +58,7 @@ export class TasksWireFieldsScenario implements ClientScenario {
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {
           extensions: { [TASKS_EXTENSION_ID]: {} }
         }

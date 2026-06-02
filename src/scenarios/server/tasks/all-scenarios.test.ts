@@ -38,10 +38,8 @@ import { TasksRequestHeadersScenario } from './headers';
 import { TasksDispatchScenario } from './dispatch';
 import { TasksStatusNotificationsScenario } from './notifications';
 import { TasksRequiredTaskErrorScenario } from './required-task-error';
-import { effectiveWireModes, type WireMode } from '../_shared/wire-mode';
 import { waitForServerReady } from '../_shared/test-runner';
 import { DRAFT_PROTOCOL_VERSION } from '../../../types';
-import type { RunContext } from '../../../connection';
 import { testContext } from '../../../connection/testing';
 
 const SERVER_URL = process.env.TASKS_SERVER_URL;
@@ -61,23 +59,6 @@ const TASKS_SCENARIOS = [
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario()
 ];
-
-// Tasks behavior is wire-independent in spec: SEP-2663 semantics
-// hold on both the legacy session wire AND the SEP-2575 stateless
-// wire. effectiveWireModes returns the modes the spec actually
-// permits for the target protocol version — on DRAFT-2026-v1 the
-// legacy initialize handshake is removed (SEP-2575 Accepted), so the
-// helper drops it and we only emit stateless traffic. Pin via
-// MCP_WIRE_MODES=legacy or =stateless when an SDK has only one wire
-// implemented. The same helper drives the mrtr harness.
-const WIRE_MODES: WireMode[] = effectiveWireModes(DRAFT_PROTOCOL_VERSION);
-
-// describe.each / it.each table shape: tuple of (label, statelessFlag) so
-// vitest reports the wire as a clean parameter row (`legacy wire`,
-// `stateless wire`) without us re-deriving the boolean inside each test.
-const WIRE_TABLE: ReadonlyArray<readonly [WireMode, boolean]> = WIRE_MODES.map(
-  (m) => [m, m === 'stateless'] as const
-);
 
 const describeIfTarget = HAVE_TARGET ? describe : describe.skip;
 
@@ -140,28 +121,23 @@ describeIfTarget('SEP-2663 Tasks — server conformance', () => {
     serverProcess = null;
   });
 
-  describe.each(WIRE_TABLE)('%s wire', (_wireLabel, stateless) => {
-    it.each(TASKS_SCENARIOS)(
-      '$name — all checks succeed against fixture',
-      async (scenario) => {
-        const ctx: RunContext = {
-          ...testContext(SERVER_URL!, DRAFT_PROTOCOL_VERSION),
-          wire: stateless ? 'stateless' : 'legacy'
-        };
-        const checks = await scenario.run(ctx);
-        expect(checks.length).toBeGreaterThan(0);
-        const failures = checks.filter(
-          (c) => c.status === 'FAILURE' || c.status === 'WARNING'
+  it.each(TASKS_SCENARIOS)(
+    '$name — all checks succeed against fixture',
+    async (scenario) => {
+      const ctx = testContext(SERVER_URL!, DRAFT_PROTOCOL_VERSION);
+      const checks = await scenario.run(ctx);
+      expect(checks.length).toBeGreaterThan(0);
+      const failures = checks.filter(
+        (c) => c.status === 'FAILURE' || c.status === 'WARNING'
+      );
+      if (failures.length > 0) {
+        const detail = failures
+          .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
+          .join('\n');
+        throw new Error(
+          `${failures.length}/${checks.length} checks failed:\n${detail}`
         );
-        if (failures.length > 0) {
-          const detail = failures
-            .map((c) => `  - ${c.id}: ${c.errorMessage ?? '(no message)'}`)
-            .join('\n');
-          throw new Error(
-            `${failures.length}/${checks.length} checks failed:\n${detail}`
-          );
-        }
       }
-    );
-  });
+    }
+  );
 });

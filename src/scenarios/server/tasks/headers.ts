@@ -31,6 +31,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2243_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg, failureCheck } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID } from './helpers';
 
 const HEADER_MISMATCH_ERROR_CODE = -32001;
@@ -68,7 +69,7 @@ values trigger rejection with JSON-RPC error code \`-32001\`
     let session: RawSession;
     try {
       session = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
       });
     } catch (error) {

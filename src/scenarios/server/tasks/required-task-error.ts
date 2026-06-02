@@ -38,6 +38,7 @@ import type { RunContext } from '../../../connection';
 import { SEP_2575_REF, SEP_2663_REF } from '../_shared/sep-refs';
 import { errMsg } from '../_shared/checks';
 import { initRawSession, type RawSession } from '../_shared/raw-session';
+import { isStateless } from '../_shared/wire-mode';
 import { TASKS_EXTENSION_ID } from './helpers';
 
 const MISSING_REQUIRED_CLIENT_CAPABILITY = -32003;
@@ -86,7 +87,7 @@ conformant server MUST reject with \`-32003\`.`;
       // Intentionally declare NO capabilities — the point of the test is
       // to exercise the "did not negotiate the tasks extension" path.
       session = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+        stateless: isStateless(ctx),
         capabilities: {}
       });
     } catch (error) {
