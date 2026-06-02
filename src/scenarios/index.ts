@@ -95,7 +95,7 @@ import { TasksRequestHeadersScenario } from './server/tasks/headers';
 import { TasksDispatchScenario } from './server/tasks/dispatch';
 import { TasksStatusNotificationsScenario } from './server/tasks/notifications';
 import { TasksRequiredTaskErrorScenario } from './server/tasks/required-task-error';
-import { MrtrEphemeralFlowScenario } from './server/mrtr/ephemeral-flow';
+import { TasksMrtrCompositionScenario } from './server/tasks/composition';
 
 import {
   HttpHeaderValidationScenario,
@@ -148,10 +148,7 @@ const pendingClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario(),
-
-  // SEP-2322 MRTR (ephemeral InputRequiredResult flow). Pending until
-  // SEP-2322 lands in the everything-server.
-  new MrtrEphemeralFlowScenario()
+  new TasksMrtrCompositionScenario()
 ];
 
 // All client scenarios
@@ -229,9 +226,7 @@ const allClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario(),
-
-  // SEP-2322 MRTR (ephemeral InputRequiredResult flow).
-  new MrtrEphemeralFlowScenario(),
+  new TasksMrtrCompositionScenario(),
 
   // InputRequiredResult scenarios (SEP-2322)
   new InputRequiredResultBasicElicitationScenario(),
