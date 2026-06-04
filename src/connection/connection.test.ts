@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { isStatefulVersion, STATELESS_SPEC_VERSIONS } from './select';
 import { connectStateless } from './stateless';
 import { JsonRpcError } from './index';
+import { DRAFT_PROTOCOL_VERSION } from '../types';
+
+describe('STATELESS_SPEC_VERSIONS', () => {
+  it('contains exactly the versions isStatefulVersion rejects', () => {
+    expect(STATELESS_SPEC_VERSIONS.length).toBeGreaterThan(0);
+    for (const v of STATELESS_SPEC_VERSIONS) {
+      expect(isStatefulVersion(v)).toBe(false);
+    }
+  });
+  it('currently contains only the draft version', () => {
+    expect(STATELESS_SPEC_VERSIONS).toEqual([DRAFT_PROTOCOL_VERSION]);
+  });
+});
 
 describe('connectStateless', () => {
   const mockFetch = vi.fn();
