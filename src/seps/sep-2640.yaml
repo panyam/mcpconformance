@@ -1,3 +1,5 @@
+# spec_source: modelcontextprotocol/modelcontextprotocol@b77fdfe8c6fa91442900c52357711978617ce18a seps/2640-skills-extension.md
+# extracted: 2026-06-03
 sep: 2640
 spec_url: https://modelcontextprotocol.io/seps/2640-skills-extension#specification
 requirements:
@@ -53,13 +55,13 @@ requirements:
     text: 'Hosts MUST NOT treat an absent or empty index as proof that a server has no skills.'
 
   - text: 'Hosts SHOULD surface template entries in their UI as interactive discovery points: the user fills in variables via completion, selects a skill, and the host passes the resolved URI into the conversation.'
-    excluded: 'UI affordance — surfacing template entries as interactive discovery points is not protocol-observable on the wire.'
+    excluded: 'UI affordance: surfacing template entries as interactive discovery points is not protocol-observable on the wire.'
   - text: 'Per RFC 3986, the first segment of `<skill-path>` occupies the authority component. This carries no special semantics under this convention and clients MUST NOT attempt DNS or network resolution of it.'
     excluded: 'DNS and network resolution sit below the MCP wire layer; the harness cannot observe whether the client performed name lookups on URI authority components.'
   - text: "[Hosts] SHOULD determine the format from the resource's `mimeType`, falling back to the URL suffix"
-    excluded: 'Internal decision logic — when `mimeType` and URL suffix agree, the harness cannot distinguish a host that branched on `mimeType` from one that fell back to the suffix.'
+    excluded: 'Internal decision logic: when `mimeType` and URL suffix agree, the harness cannot distinguish a host that branched on `mimeType` from one that fell back to the suffix.'
   - text: 'Hosts MUST treat MCP-served skill content as untrusted model input, subject to the same prompt-injection defenses applied to any server-provided text. A server being connected does not make its skill content authoritative.'
-    excluded: 'Internal host policy — "treats as untrusted" is an assertion about how content is reasoned over downstream of the read, not about wire traffic.'
+    excluded: 'Internal host policy: "treats as untrusted" is an assertion about how content is reasoned over downstream of the read, not about wire traffic.'
     url: https://modelcontextprotocol.io/seps/2640-skills-extension#security-implications
   - text: 'Hosts MUST NOT honor mechanisms in skill content that would cause local code execution without explicit user opt-in. This includes, non-exhaustively: hook declarations, pre/post-invocation scripts, shell commands embedded in frontmatter, or any field that a filesystem-sourced skill might use to register executable behavior on the host.'
     excluded: 'Local code execution and explicit user opt-in are host-side filesystem and UX behaviors; not protocol-observable on the wire.'
