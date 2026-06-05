@@ -1,5 +1,5 @@
-# spec_source: modelcontextprotocol/modelcontextprotocol@b77fdfe8c6fa91442900c52357711978617ce18a seps/2640-skills-extension.md
-# extracted: 2026-06-03
+# spec_source: modelcontextprotocol/modelcontextprotocol@556154c088371149c120172e95bb634655f00cbe seps/2640-skills-extension.md
+# extracted: 2026-06-05
 sep: 2640
 spec_url: https://modelcontextprotocol.io/seps/2640-skills-extension#specification
 requirements:
@@ -30,11 +30,11 @@ requirements:
   - check: sep-2640-server-expose-index
     text: 'A server SHOULD expose a resource at the well-known URI `skill://index.json` whose content is a JSON index of the skills it serves.'
   - check: sep-2640-index-entry-type-enum
-    text: '`skills[].type` MUST be `"skill-md"`, `"archive"`, or `"mcp-resource-template"`.'
+    text: '`skills[].type` MUST be `"skill-md"` or `"archive"`.'
   - check: sep-2640-index-name-required
-    text: '`skills[].name` is Required for `"skill-md"` and `"archive"`; matches the `SKILL.md` frontmatter `name` and the final segment of the skill path. Omitted for `"mcp-resource-template"`.'
+    text: '`skills[].name` matches the `SKILL.md` frontmatter `name` and the final segment of the skill path.'
   - check: sep-2640-index-digest-required
-    text: '`skills[].digest` is Required for `"skill-md"` and `"archive"`: SHA-256 content digest of the artifact, formatted as `sha256:{hex}` (64 lowercase hexadecimal characters). Omitted for `"mcp-resource-template"`.'
+    text: '`skills[].digest` is the SHA-256 content digest of the artifact, formatted as `sha256:{hex}` (64 lowercase hex characters).'
   - check: sep-2640-client-ignore-unrecognized
     text: 'Clients SHOULD ignore unrecognized fields and SHOULD skip entries with an unrecognized `type`.'
   - check: sep-2640-archive-format
@@ -47,15 +47,11 @@ requirements:
     text: 'the archive MUST NOT contain path-traversal sequences (`..`) or absolute paths'
   - check: sep-2640-host-archive-safety
     text: 'Hosts unpacking an archive MUST apply the archive safety requirements of the Agent Skills specification: reject archives containing path-traversal sequences or absolute paths, reject symlinks or hard links that resolve outside the skill directory, and enforce a limit on total unpacked size / Hosts MUST validate archives per the Agent Skills archive safety requirements: reject path traversal and absolute paths, reject links resolving outside the skill directory, and bound total unpacked size to prevent decompression bombs.'
-  - check: sep-2640-template-resource-template-registered
-    text: 'A server SHOULD register the same `url` value as an MCP resource template so hosts can wire template variables to the completion API.'
   - check: sep-2640-host-verify-digest
     text: 'Hosts MUST verify retrieved content against the `digest` in the index / hosts MUST NOT use unverified content.'
   - check: sep-2640-host-no-empty-index-assumption
     text: 'Hosts MUST NOT treat an absent or empty index as proof that a server has no skills.'
 
-  - text: 'Hosts SHOULD surface template entries in their UI as interactive discovery points: the user fills in variables via completion, selects a skill, and the host passes the resolved URI into the conversation.'
-    excluded: 'UI affordance: surfacing template entries as interactive discovery points is not protocol-observable on the wire.'
   - text: 'Per RFC 3986, the first segment of `<skill-path>` occupies the authority component. This carries no special semantics under this convention and clients MUST NOT attempt DNS or network resolution of it.'
     excluded: 'DNS and network resolution sit below the MCP wire layer; the harness cannot observe whether the client performed name lookups on URI authority components.'
   - text: "[Hosts] SHOULD determine the format from the resource's `mimeType`, falling back to the URL suffix"
