@@ -95,7 +95,7 @@ import { TasksRequestHeadersScenario } from './server/tasks/headers';
 import { TasksDispatchScenario } from './server/tasks/dispatch';
 import { TasksStatusNotificationsScenario } from './server/tasks/notifications';
 import { TasksRequiredTaskErrorScenario } from './server/tasks/required-task-error';
-import { MrtrEphemeralFlowScenario } from './server/mrtr/ephemeral-flow';
+import { TasksMrtrCompositionScenario } from './server/tasks/composition';
 
 import {
   HttpHeaderValidationScenario,
@@ -135,12 +135,10 @@ const pendingClientScenariosList: ClientScenario[] = [
   new HttpHeaderValidationScenario(),
   new HttpCustomHeaderServerValidationScenario(),
 
-  // SEP-2663 Tasks extension lifecycle.
-  // The everything-server does not implement the
-  // io.modelcontextprotocol/tasks extension, so all-scenarios.test.ts
-  // cannot exercise these against the default fixture. Active runs target
-  // a SEP-2663-conformant server via the dedicated
-  // tasks/all-scenarios.test.ts harness.
+  // SEP-2663 Tasks extension. Pending because the everything-server
+  // does not implement io.modelcontextprotocol/tasks; targeted runs
+  // point at a SEP-2663-conformant fixture via
+  // `npm start -- server --scenario tasks-* --url <fixture>`.
   new TasksLifecycleScenario(),
   new TasksCapabilityNegotiationScenario(),
   new TasksWireFieldsScenario(),
@@ -150,12 +148,7 @@ const pendingClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario(),
-
-  // SEP-2322 MRTR (ephemeral InputRequiredResult flow).
-  // Targets a different fixture than tasks scenarios; the dedicated
-  // mrtr/all-scenarios.test.ts runner points at an MRTR-conformant
-  // server via MRTR_SERVER_URL / MRTR_SERVER_CMD.
-  new MrtrEphemeralFlowScenario()
+  new TasksMrtrCompositionScenario()
 ];
 
 // All client scenarios
@@ -222,11 +215,8 @@ const allClientScenariosList: ClientScenario[] = [
   new HttpHeaderValidationScenario(),
   new HttpCustomHeaderServerValidationScenario(),
 
-  // SEP-2663 Tasks extension.
-  // Listed here so the CLI can find each scenario by name and so the
-  // active/pending filter sees it; pendingClientScenariosList above
-  // excludes them from automatic runs against the everything-server
-  // (which doesn't implement io.modelcontextprotocol/tasks yet).
+  // SEP-2663 Tasks extension. Pending against the everything-server;
+  // targeted runs point at a SEP-2663-conformant fixture.
   new TasksLifecycleScenario(),
   new TasksCapabilityNegotiationScenario(),
   new TasksWireFieldsScenario(),
@@ -236,11 +226,7 @@ const allClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario(),
-
-  // SEP-2322 MRTR (ephemeral InputRequiredResult flow). Targets a
-  // dedicated MRTR fixture — out of scope for the default
-  // everything-server until SEP-2322 lands there.
-  new MrtrEphemeralFlowScenario(),
+  new TasksMrtrCompositionScenario(),
 
   // InputRequiredResult scenarios (SEP-2322)
   new InputRequiredResultBasicElicitationScenario(),

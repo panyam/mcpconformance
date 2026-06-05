@@ -15,10 +15,9 @@ import {
   ConformanceCheck,
   ScenarioSource
 } from '../../../types';
-import type { RunContext } from '../../../connection';
-import { SEP_2575_REF, SEP_2663_REF } from '../_shared/sep-refs';
-import { errMsg, failureCheck } from '../_shared/checks';
-import { initRawSession, type RawSession } from '../_shared/raw-session';
+import type { Connection, RunContext } from '../../../connection';
+import { SEP_2575_REF, SEP_2663_REF } from '../tasks-mrtr-helpers';
+import { errMsg, failureCheck } from '../tasks-mrtr-helpers';
 import { TASKS_EXTENSION_ID } from './helpers';
 
 export class TasksCapabilityNegotiationScenario implements ClientScenario {
@@ -50,26 +49,28 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
   opt into task creation for a single \`tools/call\` by including the
   extension under \`_meta.io.modelcontextprotocol/clientCapabilities.extensions\`.
   The server MUST honor the per-request opt-in and produce a
-  \`CreateTaskResult\` for that call.`;
+  \`CreateTaskResult\` for that call.
+
+**Required server fixtures (\`tools/list\` MUST include all):**
+- \`greet\` — sync-only, returns \`Hello, {name}!\`.
+- \`slow_compute\` — task-supporting, \`seconds\`-second sleep then a
+  result.`;
 
   async run(ctx: RunContext): Promise<ConformanceCheck[]> {
-    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     // Two parallel sessions: one declares the extension, one does NOT.
-    let withExt: RawSession;
-    let withoutExt: RawSession;
+    let withExt: Connection;
+    let withoutExt: Connection;
     try {
-      withExt = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+      withExt = await ctx.connect({
         capabilities: {
           elicitation: {},
           sampling: {},
           extensions: { [TASKS_EXTENSION_ID]: {} }
         }
       });
-      withoutExt = await initRawSession(serverUrl, {
-        stateless: ctx.wire === 'stateless',
+      withoutExt = await ctx.connect({
         capabilities: {}
       });
     } catch (error) {
@@ -90,7 +91,8 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
       const id = 'tasks-extension-advertised';
       const name = 'TasksExtensionAdvertised';
       const description = `Server advertises ${TASKS_EXTENSION_ID} under capabilities.extensions (and not capabilities.tasks)`;
-      const caps: any = (withExt.initializeResult.capabilities as any) ?? {};
+      const discovered = await withExt.discover();
+      const caps: any = (discovered.capabilities as any) ?? {};
       const errs: string[] = [];
       if (caps.tasks) {
         errs.push(
