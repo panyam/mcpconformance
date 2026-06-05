@@ -232,15 +232,16 @@ export const clientScenarios = new Map<string, ClientScenario>(
 );
 
 // All client scenarios for authorization server
-const allClientScenariosListForAuthorizationServer: ClientScenario[] = [
-  // Authorization server scenarios
-  new AuthorizationServerMetadataEndpointScenario()
-];
+const allClientScenariosListForAuthorizationServer: ClientScenarioForAuthorizationServer[] =
+  [
+    // Authorization server scenarios
+    new AuthorizationServerMetadataEndpointScenario()
+  ];
 
 // Client scenarios map for authorization server - built from list
 export const clientScenariosForAuthorizationServer = new Map<
   string,
-  ClientScenario
+  ClientScenarioForAuthorizationServer
 >(
   allClientScenariosListForAuthorizationServer.map((scenario) => [
     scenario.name,
@@ -396,6 +397,18 @@ function matchesSpecVersion(
     (source.removedIn === undefined ||
       versionIndex(version) < versionIndex(source.removedIn))
   );
+}
+
+/**
+ * Whether a scenario's applicability window covers `version`. Used by the
+ * runner to skip explicitly-requested scenario/spec-version combinations
+ * that contradict (e.g. a draft-only scenario at a dated spec version).
+ */
+export function isScenarioApplicableAt(
+  source: ScenarioSource,
+  version: SpecVersion
+): boolean {
+  return matchesSpecVersion(source, version);
 }
 
 export function listScenariosForSpec(version: SpecVersion): string[] {
