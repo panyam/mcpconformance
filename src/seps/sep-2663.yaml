@@ -141,6 +141,12 @@ requirements:
   - check: sep-2663-tasks-list-removed-method-not-found
     text: 'tasks/list is removed; clients calling it MUST receive -32601 (Method Not Found).'
 
+  - check: sep-2663-create-result-no-request-state
+    text: 'CreateTaskResult MUST NOT carry the v1 requestState field; SEP-2663 removes requestState from the tasks-v2 wire.'
+
+  - check: sep-2663-detailed-task-no-request-state
+    text: 'DetailedTask (tasks/get response) MUST NOT carry the v1 requestState field for any status; SEP-2663 removes requestState from the tasks-v2 wire.'
+
   - check: sep-2663-legacy-task-param-ignored
     text: 'The task parameter on CallToolRequest is removed; servers MUST ignore it (treat the field as unknown) rather than using it as an opt-in.'
 
