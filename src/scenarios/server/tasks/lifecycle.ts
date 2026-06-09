@@ -110,8 +110,8 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
 
     // Check 1: sync tool call returns ToolResult, no task creation.
     {
-      const id = 'tasks-sync-tool-call';
-      const name = 'TasksSyncToolCall';
+      const id = 'sep-2663-no-task-result-type-on-others';
+      const name = 'Sep2663NoTaskResultTypeOnOthers';
       const description =
         'Sync tool returns ToolResult (resultType:"complete"), no taskId at top level';
       try {
