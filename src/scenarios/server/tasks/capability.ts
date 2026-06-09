@@ -84,8 +84,8 @@ export class TasksCapabilityNegotiationScenario implements ClientScenario {
 
     // Check 1: server advertises extension under capabilities.extensions.
     {
-      const id = 'tasks-extension-advertised';
-      const name = 'TasksExtensionAdvertised';
+      const id = 'sep-2663-migrate-from-legacy-capabilities';
+      const name = 'Sep2663MigrateFromLegacyCapabilities';
       const description = `Server advertises ${TASKS_EXTENSION_ID} under capabilities.extensions (and not capabilities.tasks)`;
       const discovered = await withExt.discover();
       const caps: any = (discovered.capabilities as any) ?? {};
