@@ -148,8 +148,7 @@ requirements:
     text: 'Servers MUST treat clients declaring only the legacy capability as non-declaring with respect to this extension.'
 
   # Scenario flow-gate checks emit IDs without an RFC-2119 sentence to
-  # anchor to (tasks-sync-tool-call,
-  # tasks-immediate-result-shortcut, tasks-wire-field-renames,
+  # anchor to (tasks-immediate-result-shortcut, tasks-wire-field-renames,
   # tasks-no-early-ttl-expiry, tasks-no-related-task-meta-on-inlined-result,
   # tasks-per-request-meta-opt-in, tasks-headers-*,
   # tasks-mrtr-tasks-update-resumes,
