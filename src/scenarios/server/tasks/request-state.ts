@@ -117,8 +117,8 @@ foreseeable mistake for fresh implementations.
 
     // Check 1: CreateTaskResult MUST NOT carry requestState.
     {
-      const id = 'tasks-create-result-no-request-state';
-      const name = 'TasksCreateResultNoRequestState';
+      const id = 'sep-2663-create-result-no-request-state';
+      const name = 'Sep2663CreateResultNoRequestState';
       const description =
         'CreateTaskResult MUST NOT carry `requestState` (SEP-2663 does not define the field on the Task base interface)';
       const has = Object.prototype.hasOwnProperty.call(
@@ -140,8 +140,8 @@ foreseeable mistake for fresh implementations.
 
     // Check 2: tasks/get response (DetailedTask) MUST NOT carry requestState.
     {
-      const id = 'tasks-get-detailed-no-request-state';
-      const name = 'TasksGetDetailedNoRequestState';
+      const id = 'sep-2663-detailed-task-no-request-state';
+      const name = 'Sep2663DetailedTaskNoRequestState';
       const description =
         'tasks/get response (DetailedTask) MUST NOT carry `requestState` for any status (per SEP-2663)';
       try {
