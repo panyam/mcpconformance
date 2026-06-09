@@ -76,8 +76,8 @@ export class TasksWireFieldsScenario implements ClientScenario {
     // Check 1: ttlMs + pollIntervalMs wire shape.
     let createdTaskId: string | undefined;
     {
-      const id = 'tasks-wire-field-renames';
-      const name = 'TasksWireFieldRenames';
+      const id = 'sep-2663-create-result-uses-ms-suffix-fields';
+      const name = 'Sep2663CreateResultUsesMsSuffixFields';
       const description =
         'CreateTaskResult uses ttlMs + pollIntervalMs (integer milliseconds); legacy ttl / pollInterval keys absent';
       try {
@@ -149,8 +149,8 @@ export class TasksWireFieldsScenario implements ClientScenario {
 
     // Check 2: task accessible before TTL elapses.
     {
-      const id = 'tasks-no-early-ttl-expiry';
-      const name = 'TasksNoEarlyTtlExpiry';
+      const id = 'sep-2663-tasks-get-accessible-within-ttl-ms';
+      const name = 'Sep2663TasksGetAccessibleWithinTtlMs';
       const description =
         'Task remains accessible via tasks/get for the duration of its ttlMs';
       if (!createdTaskId) {
@@ -192,8 +192,8 @@ export class TasksWireFieldsScenario implements ClientScenario {
 
     // Check 3: no related-task _meta on inlined result.
     {
-      const id = 'tasks-no-related-task-meta-on-inlined-result';
-      const name = 'TasksNoRelatedTaskMetaOnInlinedResult';
+      const id = 'sep-2663-no-related-task-meta-on-inlined-result';
+      const name = 'Sep2663NoRelatedTaskMetaOnInlinedResult';
       const description =
         'tasks/get inlined result MUST NOT include the v1 io.modelcontextprotocol/related-task _meta key (taskId is at the root)';
       try {

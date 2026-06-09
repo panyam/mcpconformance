@@ -147,6 +147,15 @@ requirements:
   - check: sep-2663-detailed-task-no-request-state
     text: 'DetailedTask (tasks/get response) MUST NOT carry the v1 requestState field for any status; SEP-2663 removes requestState from the tasks-v2 wire.'
 
+  - check: sep-2663-create-result-uses-ms-suffix-fields
+    text: 'CreateTaskResult MUST carry ttlMs and (when applicable) pollIntervalMs as integer milliseconds; the v1 ttl and pollInterval keys MUST NOT appear.'
+
+  - check: sep-2663-tasks-get-accessible-within-ttl-ms
+    text: 'A task MUST remain accessible via tasks/get for the duration of its declared ttlMs.'
+
+  - check: sep-2663-no-related-task-meta-on-inlined-result
+    text: 'tasks/get inlined result MUST NOT carry the v1 io.modelcontextprotocol/related-task _meta key; SEP-2663 hoists taskId to the root of the response.'
+
   - check: sep-2663-legacy-task-param-ignored
     text: 'The task parameter on CallToolRequest is removed; servers MUST ignore it (treat the field as unknown) rather than using it as an opt-in.'
 
@@ -157,8 +166,7 @@ requirements:
     text: 'Servers MUST treat clients declaring only the legacy capability as non-declaring with respect to this extension.'
 
   # Scenario flow-gate checks emit IDs without an RFC-2119 sentence to
-  # anchor to (tasks-immediate-result-shortcut, tasks-wire-field-renames,
-  # tasks-no-early-ttl-expiry, tasks-no-related-task-meta-on-inlined-result,
+  # anchor to (tasks-immediate-result-shortcut,
   # tasks-per-request-meta-opt-in, tasks-headers-*,
   # tasks-mrtr-tasks-update-resumes,
   # tasks-mrtr-partial-fulfillment, tasks-server-directed-creation-no-hint,
