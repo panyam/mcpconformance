@@ -154,7 +154,7 @@ requirements:
   # tasks-per-request-meta-opt-in, tasks-headers-*,
   # tasks-cancel-terminal-idempotent-ack, tasks-mrtr-tasks-update-resumes,
   # tasks-mrtr-partial-fulfillment, tasks-server-directed-creation-no-hint,
-  # tasks-result-type-complete-on-non-task-responses, tasks-removed-tasks-list,
+  # tasks-removed-tasks-list,
   # plus the ephemeral mrtr-* flow-gates in src/scenarios/server/mrtr/).
   # These verify end-to-end flow invariants rather than a specific normative
   # sentence, so they surface in the traceability manifest's `untracked`

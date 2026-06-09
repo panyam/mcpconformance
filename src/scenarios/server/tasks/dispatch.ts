@@ -23,8 +23,8 @@
 
 import { ClientScenario, ConformanceCheck } from '../../../types';
 import type { Connection, RunContext } from '../../../connection';
-import { SEP_2322_REF, SEP_2663_REF } from './mrtr-helpers';
-import { errMsg, failureCheck } from './mrtr-helpers';
+import { SEP_2663_REF } from './mrtr-helpers';
+import { errMsg, failureCheck, skipCheck } from './mrtr-helpers';
 import {
   TASKS_EXTENSION_ID,
   validTasksParams,
@@ -332,93 +332,144 @@ export class TasksDispatchScenario implements ClientScenario {
       }
     }
 
-    // Check 6: resultType:"complete" on every non-task response.
+    // Check 6a: resultType:"complete" on tasks/get.
+    // (Sync tools/call resultType:"complete" is verified by
+    // tasks-sync-tool-call in lifecycle.ts; no need to duplicate it here.)
     {
-      const id = 'tasks-result-type-complete-on-non-task-responses';
-      const name = 'TasksResultTypeCompleteOnNonTaskResponses';
+      const id = 'sep-2663-result-type-complete-on-tasks-get';
+      const name = 'Sep2663ResultTypeCompleteOnTasksGet';
       const description =
-        'Sync tools/call, tasks/get, tasks/update ack, and tasks/cancel ack MUST all carry resultType:"complete"';
-      const errs: string[] = [];
+        'The resultType field MUST be set to "complete" on the tasks/get response';
       try {
-        // Sync tools/call.
-        const sync = (await conn.request('tools/call', {
-          name: 'greet',
-          arguments: { name: 'rt' }
-        })) as any;
-        if (sync.resultType !== 'complete') {
-          errs.push(
-            `sync tools/call resultType = ${JSON.stringify(sync.resultType)}, want "complete"`
-          );
-        }
-
-        // tasks/get against a fresh task.
         const created = (await conn.request('tools/call', {
           name: 'slow_compute',
           arguments: { seconds: 0, label: 'rt-get' }
         })) as any;
         const taskIdForGet = created.taskId;
-        if (taskIdForGet) {
+        if (!taskIdForGet) {
+          checks.push(
+            skipCheck(
+              id,
+              name,
+              description,
+              'fixture did not create a task for tasks/get',
+              [SEP_2663_REF]
+            )
+          );
+        } else {
           await waitForTerminal(conn, taskIdForGet);
           const got = (await conn.request('tasks/get', {
             taskId: taskIdForGet
           })) as any;
-          if (got.resultType !== 'complete') {
-            errs.push(
-              `tasks/get resultType = ${JSON.stringify(got.resultType)}, want "complete"`
-            );
-          }
+          const ok = got.resultType === 'complete';
+          checks.push({
+            id,
+            name,
+            description,
+            status: ok ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: ok
+              ? undefined
+              : `tasks/get resultType = ${JSON.stringify(got.resultType)}, want "complete"`,
+            specReferences: [SEP_2663_REF]
+          });
         }
+      } catch (error) {
+        checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
+      }
+    }
 
-        // tasks/cancel ack on a fresh long-running task.
+    // Check 6b: resultType:"complete" on tasks/cancel ack.
+    {
+      const id = 'sep-2663-result-type-complete-on-tasks-cancel';
+      const name = 'Sep2663ResultTypeCompleteOnTasksCancel';
+      const description =
+        'The resultType field MUST be set to "complete" on CancelTaskResult';
+      try {
         const longLived = (await conn.request('tools/call', {
           name: 'slow_compute',
           arguments: { seconds: 60, label: 'rt-cancel' }
         })) as any;
-        if (longLived.taskId) {
+        if (!longLived.taskId) {
+          checks.push(
+            skipCheck(
+              id,
+              name,
+              description,
+              'fixture did not create a task for tasks/cancel',
+              [SEP_2663_REF]
+            )
+          );
+        } else {
           const cancelAck = (await conn.request('tasks/cancel', {
             taskId: longLived.taskId
           })) as any;
-          if (cancelAck.resultType !== 'complete') {
-            errs.push(
-              `tasks/cancel ack resultType = ${JSON.stringify(cancelAck.resultType)}, want "complete"`
-            );
-          }
+          const ok = cancelAck.resultType === 'complete';
+          checks.push({
+            id,
+            name,
+            description,
+            status: ok ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: ok
+              ? undefined
+              : `tasks/cancel ack resultType = ${JSON.stringify(cancelAck.resultType)}, want "complete"`,
+            specReferences: [SEP_2663_REF]
+          });
         }
+      } catch (error) {
+        checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
+      }
+    }
 
-        // tasks/update ack on a parked elicitation task.
+    // Check 6c: resultType:"complete" on tasks/update ack.
+    {
+      const id = 'sep-2663-result-type-complete-on-tasks-update';
+      const name = 'Sep2663ResultTypeCompleteOnTasksUpdate';
+      const description =
+        'The resultType field MUST be set to "complete" on UpdateTaskResult';
+      try {
         const elicit = (await conn.request('tools/call', {
           name: 'confirm_delete',
           arguments: { filename: 'rt.txt' }
         })) as any;
         const elicitTaskId = elicit.taskId;
-        if (elicitTaskId) {
+        if (!elicitTaskId) {
+          checks.push(
+            skipCheck(
+              id,
+              name,
+              description,
+              'fixture did not create a task for tasks/update',
+              [SEP_2663_REF]
+            )
+          );
+        } else {
           await waitForStatus(conn, elicitTaskId, 'input_required', 5_000);
           const updateAck = (await conn.request('tasks/update', {
             taskId: elicitTaskId,
             inputResponses: { 'unknown-key': { ignored: true } }
           })) as any;
-          if (updateAck.resultType !== 'complete') {
-            errs.push(
-              `tasks/update ack resultType = ${JSON.stringify(updateAck.resultType)}, want "complete"`
-            );
-          }
+          const ok = updateAck.resultType === 'complete';
+          checks.push({
+            id,
+            name,
+            description,
+            status: ok ? 'SUCCESS' : 'FAILURE',
+            timestamp: new Date().toISOString(),
+            errorMessage: ok
+              ? undefined
+              : `tasks/update ack resultType = ${JSON.stringify(updateAck.resultType)}, want "complete"`,
+            specReferences: [SEP_2663_REF]
+          });
           try {
             await conn.request('tasks/cancel', { taskId: elicitTaskId });
           } catch {
             /* swallow */
           }
         }
-        checks.push({
-          id,
-          name,
-          description,
-          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-          specReferences: [SEP_2322_REF, SEP_2663_REF]
-        });
       } catch (error) {
-        checks.push(failureCheck(id, name, description, error, [SEP_2322_REF]));
+        checks.push(failureCheck(id, name, description, error, [SEP_2663_REF]));
       }
     }
 
