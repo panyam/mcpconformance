@@ -138,6 +138,9 @@ requirements:
   - check: sep-2663-tasks-result-removed-method-not-found
     text: 'tasks/result is removed; clients calling it MUST receive -32601 (Method Not Found).'
 
+  - check: sep-2663-tasks-list-removed-method-not-found
+    text: 'tasks/list is removed; clients calling it MUST receive -32601 (Method Not Found).'
+
   - check: sep-2663-legacy-task-param-ignored
     text: 'The task parameter on CallToolRequest is removed; servers MUST ignore it (treat the field as unknown) rather than using it as an opt-in.'
 
@@ -153,7 +156,6 @@ requirements:
   # tasks-per-request-meta-opt-in, tasks-headers-*,
   # tasks-mrtr-tasks-update-resumes,
   # tasks-mrtr-partial-fulfillment, tasks-server-directed-creation-no-hint,
-  # tasks-removed-tasks-list,
   # plus the ephemeral mrtr-* flow-gates in src/scenarios/server/mrtr/).
   # These verify end-to-end flow invariants rather than a specific normative
   # sentence, so they surface in the traceability manifest's `untracked`

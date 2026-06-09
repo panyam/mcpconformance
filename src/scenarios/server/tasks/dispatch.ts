@@ -176,8 +176,8 @@ export class TasksDispatchScenario implements ClientScenario {
     // body is fully valid. Routing headers + _meta come from raw-
     // conn. Only the method name itself is wrong.
     {
-      const id = 'tasks-removed-tasks-list';
-      const name = 'TasksRemovedTasksList';
+      const id = 'sep-2663-tasks-list-removed-method-not-found';
+      const name = 'Sep2663TasksListRemovedMethodNotFound';
       const description =
         'tasks/list is removed in v2 and MUST reject with -32601';
       try {
