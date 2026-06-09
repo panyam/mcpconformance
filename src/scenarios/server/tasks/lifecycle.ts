@@ -59,12 +59,16 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
   error shape: code/message/data) and MUST NOT carry \`result\`.
 
 **Cancellation:**
-- \`tasks/cancel\` MUST return an empty
+- On success, \`tasks/cancel\` MUST return an empty
   \`{resultType:"complete"}\` ack — no task envelope (SEP-2322
   discriminator). The cancelled status is observed via the next
   \`tasks/get\`.
-- \`tasks/cancel\` against a terminal task MUST return JSON-RPC
-  \`-32602\` (InvalidParams). Clarified upstream in spec commit d963ad0.
+- A cancel against a known task that is already terminal is still a
+  success — the server MUST return the same empty ack (cancel is
+  idempotent on known tasks). Spec commit d963ad0 carved this case
+  away from the error path: \`-32602\` (InvalidParams) is SHOULD on
+  \`tasks/cancel\` only when the \`taskId\` does not correspond to a
+  known task, not when the task exists but has terminated.
 
 **Required server fixtures (\`tools/list\` MUST include all):**
 - \`greet\` — sync-only, returns \`Hello, {name}!\`.
@@ -479,8 +483,8 @@ The server MUST advertise \`io.modelcontextprotocol/tasks\` under
     // race where a task terminates between observation and the cancel
     // request.
     {
-      const id = 'tasks-cancel-terminal-idempotent-ack';
-      const name = 'TasksCancelTerminalIdempotentAck';
+      const id = 'sep-2663-cancel-ack-empty-result';
+      const name = 'Sep2663CancelAckEmptyResult';
       const description =
         'tasks/cancel on a terminal task returns the same empty-ack as on an active task (idempotent)';
       try {

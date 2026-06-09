@@ -152,7 +152,7 @@ requirements:
   # tasks-immediate-result-shortcut, tasks-wire-field-renames,
   # tasks-no-early-ttl-expiry, tasks-no-related-task-meta-on-inlined-result,
   # tasks-per-request-meta-opt-in, tasks-headers-*,
-  # tasks-cancel-terminal-idempotent-ack, tasks-mrtr-tasks-update-resumes,
+  # tasks-mrtr-tasks-update-resumes,
   # tasks-mrtr-partial-fulfillment, tasks-server-directed-creation-no-hint,
   # tasks-removed-tasks-list,
   # plus the ephemeral mrtr-* flow-gates in src/scenarios/server/mrtr/).
