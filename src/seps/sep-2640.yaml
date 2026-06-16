@@ -1,5 +1,15 @@
 # spec_source: modelcontextprotocol/modelcontextprotocol@556154c088371149c120172e95bb634655f00cbe seps/2640-skills-extension.md
 # extracted: 2026-06-05
+# forward_reference: rows sep-2640-capability-directory-read-flag through
+#   sep-2640-directory-read-pagination track SEP commit
+#   2e04c48da90224000e750ffd54a3611f2824fbc0 (2026-06-09) — the
+#   resources/directory/read addition. The file-level provenance above
+#   stays at 556154c because the PR 97 schema rewrite (360123d0,
+#   2026-06-08) made 3 existing rows stale (sep-2640-index-entry-type-enum,
+#   sep-2640-index-name-required, sep-2640-index-digest-required) and
+#   drifted ~11 others' verbatim wording. Full re-extraction at SEP HEAD
+#   is mcpkit#780's lifecycle; this file deliberately holds at 556154c
+#   until that lands.
 sep: 2640
 spec_url: https://modelcontextprotocol.io/seps/2640-skills-extension#specification
 requirements:
@@ -51,6 +61,20 @@ requirements:
     text: 'Hosts MUST verify retrieved content against the `digest` in the index / hosts MUST NOT use unverified content.'
   - check: sep-2640-host-no-empty-index-assumption
     text: 'Hosts MUST NOT treat an absent or empty index as proof that a server has no skills.'
+
+  # resources/directory/read additions (SEP commit 2e04c48d, 2026-06-09)
+  - check: sep-2640-capability-directory-read-flag
+    text: 'Clients MUST NOT call `resources/directory/read` against a server that has not declared `directoryRead: true`.'
+  - check: sep-2640-directory-read-method-registered
+    text: 'A server that declares `directoryRead` MUST support the method for every directory within the skill namespaces it serves as individual files.'
+  - check: sep-2640-directory-read-subdir-mimetype
+    text: 'A _directory resource_ is a resource whose `mimeType` is `inode/directory`.'
+  - check: sep-2640-directory-read-result-resources-shape
+    text: 'The result contains every direct child of the directory: files with their ordinary resource metadata, subdirectories listed as directory resources (`mimeType: "inode/directory"`). The listing is not recursive; clients descend by calling the method again on a child directory.'
+  - check: sep-2640-directory-read-invalid-params
+    text: 'The method applies only to directory resources. If the URI does not exist, or exists but is not a directory resource, the server MUST return error `-32602` (Invalid params) — the same code `resources/read` uses for unknown resources.'
+  - check: sep-2640-directory-read-pagination
+    text: 'Pagination mirrors `resources/list`: when the result includes `nextCursor`, the client passes it back as `cursor` to retrieve the next page.'
 
   - text: 'Per RFC 3986, the first segment of `<skill-path>` occupies the authority component. This carries no special semantics under this convention and clients MUST NOT attempt DNS or network resolution of it.'
     excluded: 'DNS and network resolution sit below the MCP wire layer; the harness cannot observe whether the client performed name lookups on URI authority components.'
