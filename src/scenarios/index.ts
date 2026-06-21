@@ -67,6 +67,7 @@ import {
 
 import { DNSRebindingProtectionScenario } from './server/dns-rebinding';
 import { CachingScenario } from './server/caching';
+import { ScopeChallengeScenario } from './server/scope-challenge';
 
 // InputRequiredResult scenarios from (SEP-2322)
 import {
@@ -148,7 +149,15 @@ const pendingClientScenariosList: ClientScenario[] = [
   new TasksDispatchScenario(),
   new TasksStatusNotificationsScenario(),
   new TasksRequiredTaskErrorScenario(),
-  new TasksMrtrCompositionScenario()
+  new TasksMrtrCompositionScenario(),
+
+  // SEP-2350 server-side scope-challenge. Pending because the everything-server
+  // is not scope-gated and the scenario requires operator-provided AS tokens via
+  // MCP_CONFORMANCE_CONTEXT; targeted runs point at a scope-gated SUT (e.g. the
+  // minimal stub in examples/servers/typescript/scope-challenge-server.ts, or
+  // a real implementation backed by the fixture in
+  // examples/auth-fixtures/keycloak/).
+  new ScopeChallengeScenario()
 ];
 
 // All client scenarios
@@ -208,6 +217,11 @@ const allClientScenariosList: ClientScenario[] = [
 
   // Security scenarios
   new DNSRebindingProtectionScenario(),
+
+  // SEP-2350 server-side scope-challenge. Operator-driven token issuance via
+  // MCP_CONFORMANCE_CONTEXT; see examples/auth-fixtures/keycloak/ for the
+  // recommended fixture.
+  new ScopeChallengeScenario(),
 
   // Caching scenarios (SEP-2549)
   new CachingScenario(),
