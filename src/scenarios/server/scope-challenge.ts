@@ -13,10 +13,14 @@
  * `examples/auth-fixtures/keycloak/` is the recommended way to mint the
  * tokens this scenario consumes.
  *
- * Conditional checks for `accepted` (OR hierarchy) and `includeGrantedScopes`
- * (defensive union advertisement) emit SKIPPED when the operator declares
- * the SUT does not implement those features, so the scenario can grade
- * minimal-conforming servers without false failures.
+ * Conditional checks for `accepted` (OR hierarchy) emit SKIPPED when the
+ * operator declares the SUT does not implement that feature, so the
+ * scenario can grade minimal-conforming servers without false failures.
+ * The `includeGrantedScopes` opt-in is not separately tested: its
+ * default-off case is observationally identical to the always-on
+ * `scope-required-only` check, and its on case would require a parallel
+ * SUT instance configured with the opt-in toggled, out of reach of a
+ * single-SUT scenario run.
  */
 
 import http from 'http';
@@ -80,8 +84,6 @@ export interface ScopeChallengeContext {
   features?: {
     /** SUT implements PR 1624's `accepted` OR-hierarchy. */
     acceptedScopes?: boolean;
-    /** SUT exposes the `includeGrantedScopes` opt-in. */
-    includeGrantedScopes?: boolean;
   };
 }
 
@@ -96,8 +98,6 @@ const CHECK_RETRY_SUCCEEDS = 'scope-challenge-passes-with-sufficient-token';
 const CHECK_ACCEPTED_HIERARCHY = 'scope-challenge-accepted-or-hierarchy';
 const CHECK_ACCEPTED_NOT_LEAKED =
   'scope-challenge-www-authenticate-accepted-not-leaked';
-const CHECK_INCL_GRANTED_OFF = 'scope-challenge-include-granted-scopes-default-off';
-const CHECK_INCL_GRANTED_ON = 'scope-challenge-include-granted-scopes-opt-in';
 
 /**
  * Parsed `WWW-Authenticate: Bearer ...` challenge. `null` value for a key
@@ -310,7 +310,7 @@ export class ScopeChallengeScenario implements ClientScenario {
   readonly source = {
     introducedIn: LATEST_SPEC_VERSION
   } as const;
-  readonly description = `Tests that a server returning insufficient-scope errors follows SEP-2350 and RFC 6750 §3.1: HTTP 403 with a parseable \`WWW-Authenticate: Bearer error="insufficient_scope", scope="..."\` challenge advertising the per-operation required scope, that the operation succeeds when retried with a properly-scoped token, and (when the operator opts in via context.features) that the OR-hierarchy \`accepted\` semantics and \`includeGrantedScopes\` opt-in behave as specified.
+  readonly description = `Tests that a server returning insufficient-scope errors follows SEP-2350 and RFC 6750 §3.1: HTTP 403 with a parseable \`WWW-Authenticate: Bearer error="insufficient_scope", scope="..."\` challenge advertising the per-operation required scope, that the operation succeeds when retried with a properly-scoped token, and (when the operator opts in via context.features) that the OR-hierarchy \`accepted\` semantics behave as specified.
 
 **Operator setup**: see \`examples/auth-fixtures/keycloak/README.md\` for the recommended Keycloak runbook. The MCP_CONFORMANCE_CONTEXT shape is documented at \`src/scenarios/server/scope-challenge.ts\`'s ScopeChallengeContext.`;
 
@@ -584,46 +584,6 @@ export class ScopeChallengeScenario implements ClientScenario {
           'accepted set not leaked into WWW-Authenticate',
           'when accepted is configured, 403 challenge advertises requiredScopes only',
           reason
-        )
-      );
-    }
-
-    if (features.includeGrantedScopes) {
-      checks.push(
-        skipped(
-          CHECK_INCL_GRANTED_OFF,
-          'includeGrantedScopes default off',
-          'by default the advertised scope is required-only',
-          'covered by scope-challenge-scope-required-only; not separately tested when SUT enables the opt-in'
-        )
-      );
-      checks.push(
-        skipped(
-          CHECK_INCL_GRANTED_ON,
-          'includeGrantedScopes opt-in unions granted into scope=',
-          'when includeGrantedScopes is opted in, scope= is granted union required',
-          'requires a parallel SUT endpoint with the opt-in toggled; not exercised in this scenario'
-        )
-      );
-    } else {
-      checks.push(
-        check(
-          CHECK_INCL_GRANTED_OFF,
-          'includeGrantedScopes default off',
-          'by default the advertised scope is required-only',
-          advertisesRequiredOnly ? 'SUCCESS' : 'FAILURE',
-          advertisesRequiredOnly
-            ? undefined
-            : 'WWW-Authenticate scope= widened beyond requiredScope without opt-in',
-          { scope: scopeParam }
-        )
-      );
-      checks.push(
-        skipped(
-          CHECK_INCL_GRANTED_ON,
-          'includeGrantedScopes opt-in unions granted into scope=',
-          'when includeGrantedScopes is opted in, scope= is granted union required',
-          'context.features.includeGrantedScopes is false'
         )
       );
     }
