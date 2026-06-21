@@ -10,9 +10,9 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT: 'false'
     ports:
-      - "${KC_PORT:-8180}:8080"
+      - '${KC_PORT:-8180}:8080'
     volumes:
       - ./realm.json:/opt/keycloak/data/import/realm.json:ro
     healthcheck:

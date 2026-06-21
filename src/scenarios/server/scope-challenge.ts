@@ -512,7 +512,8 @@ export class ScopeChallengeScenario implements ClientScenario {
         scenarioCtx.tokens.acceptedHierarchy,
         scenarioCtx.scopeGatedTool
       );
-      const acceptedOk = acceptedResp.status >= 200 && acceptedResp.status < 300;
+      const acceptedOk =
+        acceptedResp.status >= 200 && acceptedResp.status < 300;
       checks.push(
         acceptedOk
           ? check(

@@ -30,7 +30,9 @@ describe('parseBearerChallenge', () => {
     const parsed = parseBearerChallenge(
       'Bearer error_description="contains a \\"quote\\" inside"'
     );
-    expect(parsed!.params['error_description']).toBe('contains a "quote" inside');
+    expect(parsed!.params['error_description']).toBe(
+      'contains a "quote" inside'
+    );
   });
 
   it('handles lowercase bearer scheme', () => {

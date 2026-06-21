@@ -43,7 +43,11 @@ function buildChallenge(): string {
     `error_description="${quoteAuthParam(`Additional scopes required: ${REQUIRED_SCOPE}`)}"`
   ];
   if (RESOURCE_METADATA) {
-    parts.splice(2, 0, `resource_metadata="${quoteAuthParam(RESOURCE_METADATA)}"`);
+    parts.splice(
+      2,
+      0,
+      `resource_metadata="${quoteAuthParam(RESOURCE_METADATA)}"`
+    );
   }
   return parts.join(', ');
 }
@@ -102,16 +106,15 @@ app.post('/mcp', (req, res) => {
       jsonrpc: '2.0',
       id,
       result: {
-        content: [
-          { type: 'text', text: `${SCOPE_GATED_TOOL}: ok` }
-        ]
+        content: [{ type: 'text', text: `${SCOPE_GATED_TOOL}: ok` }]
       }
     });
     return;
   }
 
   if (!bearer) {
-    res.status(401)
+    res
+      .status(401)
       .set('WWW-Authenticate', `Bearer error="invalid_token"`)
       .json({
         jsonrpc: '2.0',
@@ -127,16 +130,22 @@ app.post('/mcp', (req, res) => {
     .json({
       jsonrpc: '2.0',
       id,
-      error: { code: -32600, message: `Insufficient scope for tool: ${toolName}` }
+      error: {
+        code: -32600,
+        message: `Insufficient scope for tool: ${toolName}`
+      }
     });
 });
 
 app.listen(PORT, () => {
-  console.log(`scope-challenge-server listening on http://localhost:${PORT}/mcp`);
+  console.log(
+    `scope-challenge-server listening on http://localhost:${PORT}/mcp`
+  );
   console.log(`  required scope: ${REQUIRED_SCOPE}`);
   console.log(`  scope-gated tool: ${SCOPE_GATED_TOOL}`);
   console.log(`  sufficient token: ${SUFFICIENT_TOKEN}`);
   console.log(`  insufficient token: ${INSUFFICIENT_TOKEN}`);
   if (ACCEPTED_TOKEN) console.log(`  accepted token: ${ACCEPTED_TOKEN}`);
-  if (RESOURCE_METADATA) console.log(`  resource_metadata: ${RESOURCE_METADATA}`);
+  if (RESOURCE_METADATA)
+    console.log(`  resource_metadata: ${RESOURCE_METADATA}`);
 });
