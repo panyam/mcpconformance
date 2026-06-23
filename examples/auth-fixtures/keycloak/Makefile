@@ -44,7 +44,7 @@ tokens-context: ## Emit MCP_CONFORMANCE_CONTEXT JSON for the scope-challenge sce
 		-d "client_id=$(CLIENT_ID)" \
 		-d "client_secret=$(CLIENT_SECRET)" \
 		-d "scope=openid tools-read tools-call admin-write" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])"); \
-	python3 -c "import json; print(json.dumps({'authServer': '$(ISSUER)', 'tokens': {'insufficient': '$$INSUFFICIENT', 'sufficient': '$$SUFFICIENT'}, 'requiredScope': 'admin-write'}))"
+	python3 -c "import json; print(json.dumps({'authServer': '$(ISSUER)', 'tokens': {'insufficient': '$$INSUFFICIENT', 'sufficient': '$$SUFFICIENT'}, 'requiredScope': 'admin-write', 'scopeGatedTool': 'admin_call'}))"
 
 prm-info: ## Print the AS info SUTs need to publish via their PRM document
 	@echo "Authorization server (issuer): $(ISSUER)"

@@ -3,10 +3,18 @@
  *
  * Drives an MCP server through the OAuth scope-challenge handshake described
  * by SEP-2350 and RFC 6750 Section 3.1. The harness acts as a client: it
- * sends `tools/call` with an under-scoped bearer token, asserts the server
- * returns HTTP 403 with a parseable `WWW-Authenticate: Bearer ...` header
- * advertising the required scope, then retries with a properly-scoped token
- * and asserts the call succeeds.
+ * does the legacy initialize handshake, then sends `tools/call` with an
+ * under-scoped bearer token and asserts the server returns HTTP 403 with a
+ * parseable `WWW-Authenticate: Bearer ...` header advertising the required
+ * scope. Retries with a properly-scoped token and asserts 2xx.
+ *
+ * Wire choice: legacy (protocolVersion 2025-11-25 in initialize params,
+ * Mcp-Session-Id propagated on subsequent requests). SEP-2350's wire shape
+ * is wire-agnostic — 403 + WWW-Authenticate is identical on legacy and
+ * SEP-2575 stateless. We pick the wire every SUT in the current matrix
+ * speaks, which is legacy: modelcontextprotocol/typescript-sdk PR 1624's
+ * transport (the reference impl) supports protocol versions through
+ * 2025-11-25 only; mcpkit accepts both wires in its default Dual mode.
  *
  * Operator-driven token issuance via `MCP_CONFORMANCE_CONTEXT`. The harness
  * does not provision an authorization server. The fixture in
@@ -23,8 +31,6 @@
  * single-SUT scenario run.
  */
 
-import http from 'http';
-import https from 'https';
 import {
   ClientScenario,
   ConformanceCheck,
@@ -189,65 +195,102 @@ export function scopesEqual(
   return true;
 }
 
+/** Raw HTTP response shape — enough for header + body inspection. */
 interface RawResponse {
   status: number;
-  headers: http.IncomingHttpHeaders;
+  headers: Headers;
   body: string;
 }
 
 /**
- * Raw HTTP POST of a JSON-RPC `tools/call` envelope, bypassing any MCP SDK.
- * The SDK client would surface a thrown error on 403 and swallow the
- * response headers we need to inspect. Mirrors the raw-fetch pattern used by
- * `http-standard-headers.ts`.
+ * Runs the legacy initialize handshake against the SUT — POST initialize,
+ * capture Mcp-Session-Id from the response, send the required
+ * notifications/initialized follow-up — and returns the session id. Uses
+ * legacy wire (`protocolVersion: 2025-11-25` in params, not SEP-2575
+ * `_meta`) because that is what modelcontextprotocol/typescript-sdk PR
+ * 1624's `WebStandardStreamableHTTPServerTransport` speaks. mcpkit's Dual
+ * mode accepts the legacy wire equally cleanly.
+ *
+ * Initialize itself takes a bearer because every SUT in the matrix
+ * gates initialize behind auth (mcpkit's JWTValidator + Keycloak both
+ * require a valid token on every request). A scenario that wanted to
+ * exercise unauthenticated initialize would skip this helper.
+ */
+async function legacyInitialize(serverUrl: string, bearer: string): Promise<string> {
+  const initBody = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 0,
+    method: 'initialize',
+    params: {
+      protocolVersion: LATEST_SPEC_VERSION,
+      capabilities: {},
+      clientInfo: { name: 'scope-challenge-scenario', version: '0.0.0' }
+    }
+  });
+  const initRes = await fetch(serverUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${bearer}`
+    },
+    body: initBody
+  });
+  if (initRes.status !== 200) {
+    throw new Error(`initialize failed: HTTP ${initRes.status}`);
+  }
+  const sessionId = initRes.headers.get('mcp-session-id');
+  // The SUT may or may not require a session id (PR 1624 in
+  // sessionIdGenerator:undefined mode does not; mcpkit's default Dual mode
+  // does). Either way, we send the initialized notification before any
+  // tools/call so a SUT that gates dispatch on initialized completion
+  // (mcpkit) is happy. Failures here are non-fatal for SUTs that don't
+  // need the notification.
+  await fetch(serverUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${bearer}`,
+      ...(sessionId ? { 'Mcp-Session-Id': sessionId } : {})
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+      params: {}
+    })
+  });
+  return sessionId ?? '';
+}
+
+/**
+ * Sends a `tools/call` POST against the SUT using the legacy wire (with
+ * the optional Mcp-Session-Id captured during initialize) and returns the
+ * raw HTTP response so the scenario can inspect status + headers without
+ * an SDK client swallowing the 403. The SDK client would throw on the
+ * 403 and hide the WWW-Authenticate header this scenario is grading.
  */
 async function callTool(
   serverUrl: string,
+  sessionId: string,
   bearer: string,
   toolName: string,
   args: Record<string, unknown> = {}
 ): Promise<RawResponse> {
-  const url = new URL(serverUrl);
-  const isHttps = url.protocol === 'https:';
-  const lib = isHttps ? https : http;
   const body = JSON.stringify({
     jsonrpc: '2.0',
     id: 1,
     method: 'tools/call',
     params: { name: toolName, arguments: args }
   });
-
-  return new Promise<RawResponse>((resolve, reject) => {
-    const req = lib.request(
-      {
-        hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
-        path: url.pathname + (url.search || ''),
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${bearer}`,
-          'Content-Length': Buffer.byteLength(body)
-        }
-      },
-      (res) => {
-        let data = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            headers: res.headers,
-            body: data
-          })
-        );
-      }
-    );
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    Authorization: `Bearer ${bearer}`
+  };
+  if (sessionId) headers['Mcp-Session-Id'] = sessionId;
+  const res = await fetch(serverUrl, { method: 'POST', headers, body });
+  return { status: res.status, headers: res.headers, body: await res.text() };
 }
 
 function check(
@@ -330,8 +373,17 @@ export class ScopeChallengeScenario implements ClientScenario {
     const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
+    // Establish a session before any tools/call. The legacy wire requires
+    // it; SUTs in stateless-id mode (PR 1624 sessionIdGenerator:undefined)
+    // tolerate an empty session id but still need the initialize handshake
+    // to recognize the protocol version. Use the sufficient token for
+    // initialize since both SUTs in the matrix gate every method behind
+    // auth, and initialize itself doesn't carry tool-level scope checks.
+    const sessionId = await legacyInitialize(serverUrl, scenarioCtx.tokens.sufficient);
+
     const insufficient = await callTool(
       serverUrl,
+      sessionId,
       scenarioCtx.tokens.insufficient,
       scenarioCtx.scopeGatedTool
     );
@@ -355,7 +407,7 @@ export class ScopeChallengeScenario implements ClientScenario {
     );
 
     const wwwAuth =
-      (insufficient.headers['www-authenticate'] as string | undefined) ?? null;
+      insufficient.headers.get('www-authenticate');
 
     checks.push(
       wwwAuth
@@ -482,6 +534,7 @@ export class ScopeChallengeScenario implements ClientScenario {
 
     const sufficient = await callTool(
       serverUrl,
+      sessionId,
       scenarioCtx.tokens.sufficient,
       scenarioCtx.scopeGatedTool
     );
@@ -509,6 +562,7 @@ export class ScopeChallengeScenario implements ClientScenario {
     if (features.acceptedScopes && scenarioCtx.tokens.acceptedHierarchy) {
       const acceptedResp = await callTool(
         serverUrl,
+        sessionId,
         scenarioCtx.tokens.acceptedHierarchy,
         scenarioCtx.scopeGatedTool
       );
@@ -534,7 +588,7 @@ export class ScopeChallengeScenario implements ClientScenario {
 
       if (acceptedResp.status === 403) {
         const acceptedChallenge = parseBearerChallenge(
-          (acceptedResp.headers['www-authenticate'] as string | undefined) ?? ''
+          acceptedResp.headers.get('www-authenticate') ?? ''
         );
         const acceptedScope = acceptedChallenge?.params['scope'] ?? null;
         const leaked =

@@ -14,7 +14,7 @@ The realm is synced from [`panyam/mcpkit` `tests/keycloak/realm.json`](https://g
 
 ## Validating `modelcontextprotocol/typescript-sdk` PR 1624 against this fixture
 
-End-to-end runbook for the SEP-2350 server-side scope-challenge implementation. Three terminal windows.
+Verified runbook for the SEP-2350 server-side scope-challenge implementation. Three terminal windows. Both PR 1624's reference impl and mcpkit's experimental Go SDK pass this scenario 8/8 SUCCESS against this fixture.
 
 ### Terminal 1: this fixture
 
@@ -25,29 +25,24 @@ make wait      # block until the realm endpoint responds (sanity)
 make tokens    # prints insufficient + sufficient tokens for a quick eyeball
 ```
 
-### Terminal 2: PR 1624's reference server
+### Terminal 2: PR 1624's reference server, wired to Keycloak
 
-Clone the TypeScript SDK and check out PR 1624's branch alongside this repo:
+The conformance fork ships a Keycloak-validating SUT in [`panyam/mcp-ts-sdk` on the `demo/scope-challenge-keycloak` branch](https://github.com/panyam/mcp-ts-sdk/tree/demo/scope-challenge-keycloak). That branch is forked from `modelcontextprotocol/typescript-sdk` and rebased on PR 1624's branch, with one example file added (`examples/server/src/scope-challenge-keycloak.ts`) and `jose` added to `examples/server/package.json` for JWKS-aware JWT verification.
 
 ```bash
 cd ..   # parent of conf-auth
-git clone https://github.com/modelcontextprotocol/typescript-sdk.git typescript-sdk-pr1624
-cd typescript-sdk-pr1624
-git fetch origin pull/1624/head:pr1624
-git checkout pr1624
+git clone https://github.com/panyam/mcp-ts-sdk.git
+cd mcp-ts-sdk
+git checkout demo/scope-challenge-keycloak
 pnpm install && pnpm run build:all
+
+# Start the SUT. Note the env var: Keycloak runs on http://localhost,
+# so the issuer URL bypass is required.
+MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL=true \
+  pnpm --filter @modelcontextprotocol/examples-server exec \
+  tsx src/scope-challenge-keycloak.ts
+# → pr1624-keycloak SUT listening on http://localhost:3100/mcp
 ```
-
-Start the SDK's conformance server, configured to trust the Keycloak from terminal 1 as its authorization server:
-
-```bash
-cd test/conformance
-MCP_AUTH_ISSUER=http://localhost:8180/realms/mcpkit-test \
-  PORT=3100 \
-  pnpm run test:conformance:server:run
-```
-
-Exact env-var names depend on PR 1624's reference server scaffolding. Adjust if the PR's docs name them differently.
 
 ### Terminal 3: run the conformance scenario
 
@@ -56,17 +51,22 @@ cd conf-auth
 npm install && npm run build
 
 CONTEXT=$(make -s -C examples/auth-fixtures/keycloak tokens-context)
-node dist/index.js server \
+MCP_CONFORMANCE_CONTEXT="$CONTEXT" node dist/index.js server \
   --url http://localhost:3100/mcp \
-  --scenario scope-challenge \
-  --context "$CONTEXT"
+  --scenario scope-challenge
 ```
 
-Expected output: all `scope-challenge-*` checks SUCCESS.
+Expected output:
+
+```
+Passed: 8/8, 0 failed, 0 warnings
+```
+
+The two `scope-challenge-accepted-*` checks emit `SKIPPED` because the demo SUT doesn't declare `accepted` scope hierarchies (kept minimal). Operators wanting to exercise those should add a third token to the context (`tokens.acceptedHierarchy`) and set `features.acceptedScopes: true`.
 
 ## See also
 
-For an experimental Go SDK that runs the same scenario against the same Keycloak realm, see [`panyam/mcpkit` `examples/auth/step-up-keycloak/`](https://github.com/panyam/mcpkit/tree/main/examples/auth/step-up-keycloak).
+For an experimental Go SDK that runs the same scenario against the same Keycloak realm, see [`panyam/mcpkit` `examples/auth/step-up-keycloak/`](https://github.com/panyam/mcpkit/tree/main/examples/auth/step-up-keycloak). Both SUTs pass `8/8 SUCCESS, 0 warnings` against this fixture, demonstrating wire-shape interop between PR 1624's reference impl and an independent Go implementation.
 
 ## Port conflicts
 
