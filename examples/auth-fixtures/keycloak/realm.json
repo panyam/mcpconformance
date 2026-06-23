@@ -18,7 +18,12 @@
       "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
       "webOrigins": ["*"],
       "defaultClientScopes": ["openid", "email", "profile"],
-      "optionalClientScopes": ["tools-read", "tools-call", "admin-write", "admin"],
+      "optionalClientScopes": [
+        "tools-read",
+        "tools-call",
+        "admin-write",
+        "admin"
+      ],
       "protocolMappers": [
         {
           "name": "subject",
