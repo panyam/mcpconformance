@@ -59,10 +59,12 @@ MCP_CONFORMANCE_CONTEXT="$CONTEXT" node dist/index.js server \
 Expected output:
 
 ```
-Passed: 8/8, 0 failed, 0 warnings
+Passed: 9/9, 0 failed, 0 warnings
 ```
 
-The two `scope-challenge-accepted-*` checks emit `SKIPPED` because the demo SUT doesn't declare `accepted` scope hierarchies (kept minimal). Operators wanting to exercise those should add a third token to the context (`tokens.acceptedHierarchy`) and set `features.acceptedScopes: true`.
+Nine checks run: 8 always-on (HTTP 403 status, WWW-Authenticate shape, scope advertisement, resource_metadata link, retry success, etc.) plus 1 conditional on `accepted` OR-hierarchy. The demo SUTs declare `accepted: ['admin-write', 'admin']` on the scope-gated tool so a token carrying just the parent `admin` scope satisfies the gate via the OR escape hatch. The `make tokens-context` target mints three tokens accordingly and emits `features.acceptedScopes: true` in the context JSON.
+
+Minimal-conforming SUTs that omit `accepted` see `Passed: 8/8` with the OR-hierarchy check emitting `SKIPPED`. Either shape (8/8 or 9/9) is a passing run; the 9th check is opt-in feature coverage.
 
 ## See also
 

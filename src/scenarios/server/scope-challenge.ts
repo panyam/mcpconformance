@@ -21,9 +21,15 @@
  * `examples/auth-fixtures/keycloak/` is the recommended way to mint the
  * tokens this scenario consumes.
  *
- * Conditional checks for `accepted` (OR hierarchy) emit SKIPPED when the
- * operator declares the SUT does not implement that feature, so the
+ * One conditional check for `accepted` (OR hierarchy) emits SKIPPED when
+ * the operator declares the SUT does not implement that feature, so the
  * scenario can grade minimal-conforming servers without false failures.
+ * The least-privilege rule (advertisement carries only requiredScope, never
+ * widens to include accepted parents) is verified by the always-on
+ * `scope-required-only` check against the first 403 from the insufficient
+ * token. That advertisement is the same whether `accepted` is configured
+ * or not, so no separate accepted-not-leaked check is needed.
+ *
  * The `includeGrantedScopes` opt-in is not separately tested: its
  * default-off case is observationally identical to the always-on
  * `scope-required-only` check, and its on case would require a parallel
@@ -102,8 +108,6 @@ const CHECK_SCOPE_REQUIRED_ONLY = 'scope-challenge-scope-required-only';
 const CHECK_PRM_LINK = 'scope-challenge-resource-metadata-link';
 const CHECK_RETRY_SUCCEEDS = 'scope-challenge-passes-with-sufficient-token';
 const CHECK_ACCEPTED_HIERARCHY = 'scope-challenge-accepted-or-hierarchy';
-const CHECK_ACCEPTED_NOT_LEAKED =
-  'scope-challenge-www-authenticate-accepted-not-leaked';
 
 /**
  * Parsed `WWW-Authenticate: Bearer ...` challenge. `null` value for a key
@@ -591,41 +595,12 @@ export class ScopeChallengeScenario implements ClientScenario {
             )
       );
 
-      if (acceptedResp.status === 403) {
-        const acceptedChallenge = parseBearerChallenge(
-          acceptedResp.headers.get('www-authenticate') ?? ''
-        );
-        const acceptedScope = acceptedChallenge?.params['scope'] ?? null;
-        const leaked =
-          acceptedScope !== null &&
-          !scopesEqual(acceptedScope, scenarioCtx.requiredScope);
-        checks.push(
-          leaked
-            ? check(
-                CHECK_ACCEPTED_NOT_LEAKED,
-                'accepted set not leaked into WWW-Authenticate',
-                'when accepted is configured, 403 challenge advertises requiredScopes only',
-                'FAILURE',
-                `accepted set leaked into challenge: scope="${acceptedScope}"`,
-                { scope: acceptedScope }
-              )
-            : check(
-                CHECK_ACCEPTED_NOT_LEAKED,
-                'accepted set not leaked into WWW-Authenticate',
-                'when accepted is configured, 403 challenge advertises requiredScopes only',
-                'SUCCESS'
-              )
-        );
-      } else {
-        checks.push(
-          skipped(
-            CHECK_ACCEPTED_NOT_LEAKED,
-            'accepted set not leaked into WWW-Authenticate',
-            'when accepted is configured, 403 challenge advertises requiredScopes only',
-            'accepted-hierarchy token did not trigger a 403; nothing to inspect'
-          )
-        );
-      }
+      // Least-privilege check ("accepted set not leaked into the
+      // advertisement") is verified by CHECK_SCOPE_REQUIRED_ONLY above,
+      // which inspects the FIRST 403 (from the insufficient token).
+      // That 403 fires whether or not accepted is configured and its
+      // scope= value is exactly requiredScope. No separate accepted-
+      // not-leaked check needed.
     } else {
       const reason = features.acceptedScopes
         ? 'context.tokens.acceptedHierarchy missing'
@@ -635,14 +610,6 @@ export class ScopeChallengeScenario implements ClientScenario {
           CHECK_ACCEPTED_HIERARCHY,
           'accepted hierarchy satisfies the gate',
           'a token with a parent scope listed in accepted satisfies the tool',
-          reason
-        )
-      );
-      checks.push(
-        skipped(
-          CHECK_ACCEPTED_NOT_LEAKED,
-          'accepted set not leaked into WWW-Authenticate',
-          'when accepted is configured, 403 challenge advertises requiredScopes only',
           reason
         )
       );
