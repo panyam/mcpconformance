@@ -216,7 +216,10 @@ interface RawResponse {
  * require a valid token on every request). A scenario that wanted to
  * exercise unauthenticated initialize would skip this helper.
  */
-async function legacyInitialize(serverUrl: string, bearer: string): Promise<string> {
+async function legacyInitialize(
+  serverUrl: string,
+  bearer: string
+): Promise<string> {
   const initBody = JSON.stringify({
     jsonrpc: '2.0',
     id: 0,
@@ -379,7 +382,10 @@ export class ScopeChallengeScenario implements ClientScenario {
     // to recognize the protocol version. Use the sufficient token for
     // initialize since both SUTs in the matrix gate every method behind
     // auth, and initialize itself doesn't carry tool-level scope checks.
-    const sessionId = await legacyInitialize(serverUrl, scenarioCtx.tokens.sufficient);
+    const sessionId = await legacyInitialize(
+      serverUrl,
+      scenarioCtx.tokens.sufficient
+    );
 
     const insufficient = await callTool(
       serverUrl,
@@ -406,8 +412,7 @@ export class ScopeChallengeScenario implements ClientScenario {
           )
     );
 
-    const wwwAuth =
-      insufficient.headers.get('www-authenticate');
+    const wwwAuth = insufficient.headers.get('www-authenticate');
 
     checks.push(
       wwwAuth
