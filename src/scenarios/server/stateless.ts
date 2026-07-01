@@ -12,6 +12,7 @@ import {
   readSseJsonRpcResponse,
   type RunContext
 } from '../../connection';
+import { notTestable } from '../untestable';
 
 const SPEC_REF = [
   {
@@ -40,9 +41,9 @@ export class ServerStatelessScenario implements ClientScenario {
    - Dynamically checks prompt capability declaration constraints, validates that active RPC handlers match advertised discovery capacities.
 3. **Version Negotiation & Headers (3 Checks)**
    - Mismatched or unknown protocol versions must return an \`UnsupportedProtocolVersionError\` (HTTP status code \`400 Bad Request\`) carrying precise version tracking arrays.
-   - Absent or altered protocol version header metadata must trigger a \`-32001 Header Mismatch\` error with an HTTP 400 boundary state.
+   - Absent or altered protocol version header metadata must trigger a \`-32020 Header Mismatch\` error with an HTTP 400 boundary state.
 4. **Client Capability Constraints (2 Checks)**
-   - Accessing platform capabilities without explicit declaration drops requests with a \`-32003 MissingRequiredClientCapabilityError\` containing needed capabilities, returning an HTTP status code \`400 Bad Request\`.
+   - Accessing platform capabilities without explicit declaration drops requests with a \`-32021 MissingRequiredClientCapabilityError\` returning an HTTP status code \`400 Bad Request\`. Its \`error.data.requiredCapabilities\` is a \`ClientCapabilities\` object keyed by the missing capability (e.g. \`{ "sampling": {} }\`), not an array of names.
 5. **Methods & Routing Mechanics (5 Checks)**
    - Removed legacy endpoints (\`initialize\`, \`ping\`, \`logging/setLevel\`, etc.) or generic unknown methods must cleanly yield an HTTP status code \`404 Not Found\` alongside a JSON-RPC \`-32601 Method not found\` payload. All error returns must preserve original request ID mappings.
    - Validates response streams contain only \`IncompleteResult\` chunks and never independent top-level JSON-RPC requests, while enforcing that no log messages are emitted when \`_meta.../logLevel\` is omitted.
@@ -114,6 +115,10 @@ export class ServerStatelessScenario implements ClientScenario {
       }
     }
 
+    // Every JSON-RPC error response observed anywhere in the scenario counts
+    // toward the id-echo backfill's "did we see any error at all" condition.
+    let errorResponsesObserved = 0;
+
     // Helper to send raw RPC requests via fetch
     const sendRpc = async (
       method: string,
@@ -156,6 +161,7 @@ export class ServerStatelessScenario implements ClientScenario {
           // Response might not be JSON
         }
       }
+      if (data?.error !== undefined) errorResponsesObserved++;
       return { res, data };
     };
 
@@ -483,6 +489,22 @@ export class ServerStatelessScenario implements ClientScenario {
       }
     );
 
+    // Fetched once here and reused by the capability-constraint checks below
+    // to tell a missing diagnostic tool apart from a genuine violation.
+    const toolsListResponse = await sendRpc(
+      'tools/list',
+      { _meta: validMeta },
+      undefined,
+      202
+    ).catch(() => null);
+    const listedToolNames: string[] = Array.isArray(
+      toolsListResponse?.data?.result?.tools
+    )
+      ? toolsListResponse.data.result.tools
+          .map((t: any) => t?.name)
+          .filter((n: any) => typeof n === 'string')
+      : [];
+
     // Dynamic verification helper to check capability consistency against true handlers
     await runCheck(
       'sep-2575-discover-capabilities-match-handlers',
@@ -493,12 +515,9 @@ export class ServerStatelessScenario implements ClientScenario {
           return {
             error: `Discovery runtime check failed: ${discoverRpcError.message}`
           };
-        const { data: toolsData } = await sendRpc(
-          'tools/list',
-          { _meta: validMeta },
-          undefined,
-          202
-        );
+        if (!toolsListResponse)
+          return { error: 'tools/list probe network hit failed' };
+        const toolsData = toolsListResponse.data;
 
         if (discoverCapabilities.tools) {
           const toolsPassed = Array.isArray(toolsData?.result?.tools);
@@ -608,9 +627,9 @@ export class ServerStatelessScenario implements ClientScenario {
       () => {
         if (!resAbsent)
           return { error: 'Header verification endpoint network hit failed' };
-        if (resAbsent.status !== 400 || dataAbsent?.error?.code !== -32001) {
+        if (resAbsent.status !== 400 || dataAbsent?.error?.code !== -32020) {
           return {
-            error: `Expected HTTP 400 and JSON-RPC error -32001, got status ${resAbsent.status} with code ${dataAbsent?.error?.code}`
+            error: `Expected HTTP 400 and JSON-RPC error -32020, got status ${resAbsent.status} with code ${dataAbsent?.error?.code}`
           };
         }
         return { details: { response: dataAbsent } };
@@ -631,12 +650,15 @@ export class ServerStatelessScenario implements ClientScenario {
     if (data401) checkErrorId(data401, 401);
 
     // Determine if this server actively enforces client capabilities
-    const serverRequiresCapability = data401?.error?.code === -32003;
+    const serverRequiresCapability = data401?.error?.code === -32021;
+    const capabilityToolListed = listedToolNames.includes(
+      'test_missing_capability'
+    );
 
     await runCheck(
       'sep-2575-server-rejects-undeclared-capability',
       'ServerRejectsUndeclaredCapability',
-      'A server MUST NOT rely on capabilities the client has not declared. If processing a request requires a capability the client did not include in io.modelcontextprotocol/clientCapabilities, the server MUST return a MissingRequiredClientCapabilityError (-32003).',
+      'A server MUST NOT rely on capabilities the client has not declared. If processing a request requires a capability the client did not include in io.modelcontextprotocol/clientCapabilities, the server MUST return a MissingRequiredClientCapabilityError (-32021).',
       () => {
         if (!res401)
           return {
@@ -645,22 +667,43 @@ export class ServerStatelessScenario implements ClientScenario {
           };
 
         if (!serverRequiresCapability) {
-          // The server didn't return -32003, so this requirement isn't
-          // exercised for this method. Report SKIPPED rather than a green PASS.
+          // Distinguish a genuine violation from a fixture gap, strongest
+          // evidence first: a result proves the tool executed (violation
+          // regardless of whether tools/list mentioned it); a non--32021
+          // error from a listed tool is the wrong code; an error from an
+          // unlisted tool means the requirement could not be exercised.
+          if (data401?.result !== undefined) {
+            return {
+              error:
+                "Server executed 'test_missing_capability' although the client did not declare the 'sampling' capability — it MUST reject with -32021",
+              details: { response: data401 }
+            };
+          }
+          if (data401?.error && capabilityToolListed) {
+            return {
+              error: `Expected MissingRequiredClientCapabilityError (-32021), got error code ${data401.error.code}`,
+              details: { response: data401 }
+            };
+          }
           return {
-            skipped: true,
-            details: {
-              note: 'Skipped requirement tracking: Server returned a non-32003 response, indicating it does not require explicit client capability authorization constraints for this method.',
-              response: data401
-            }
+            error: notTestable(
+              "server does not list the diagnostic tool 'test_missing_capability' in tools/list and the probe call did not exercise it (required for the undeclared-capability rejection)"
+            ),
+            details: { untestable: true, response: data401 }
           };
         }
 
-        // If it DOES return -32003, strictly validate the requirement payload structure
+        // If it DOES return -32021, strictly validate the requirement payload
+        // structure. Per the schema's `MissingRequiredClientCapabilityError`,
+        // `error.data.requiredCapabilities` is a `ClientCapabilities` OBJECT
+        // keyed by the missing capability — not an array of capability names —
+        // and each capability value is itself an object.
         const reqCaps = data401?.error?.data?.requiredCapabilities;
-        if (!Array.isArray(reqCaps) || !reqCaps.includes('sampling')) {
+        const isPlainObject = (value: unknown): boolean =>
+          typeof value === 'object' && value !== null && !Array.isArray(value);
+        if (!isPlainObject(reqCaps) || !isPlainObject(reqCaps.sampling)) {
           return {
-            error: `Server responded with error code -32003 but failed to provide an array containing the expected 'sampling' capability in error.data.requiredCapabilities`,
+            error: `Server responded with error code -32021 but error.data.requiredCapabilities is not a ClientCapabilities object naming 'sampling' (the schema defines it as an object of capability objects, e.g. { "sampling": {} }, not an array)`,
             details: { response: data401 }
           };
         }
@@ -680,14 +723,16 @@ export class ServerStatelessScenario implements ClientScenario {
           };
 
         if (!serverRequiresCapability) {
-          // No -32003 means the HTTP-400 requirement doesn't apply here.
-          // Report SKIPPED rather than a green PASS.
+          // Same root cause as the previous check: either the diagnostic
+          // tool is missing (untestable) or the server failed to emit the
+          // -32021 this status requirement attaches to.
           return {
-            skipped: true,
-            details: {
-              note: 'Skipped status tracking: Server did not return a MissingRequiredClientCapabilityError.',
-              httpStatus: res401.status
-            }
+            error: notTestable(
+              capabilityToolListed
+                ? 'server did not return MissingRequiredClientCapabilityError, so its HTTP status could not be validated'
+                : "server does not list the diagnostic tool 'test_missing_capability' in tools/list, so the -32021 HTTP status could not be validated"
+            ),
+            details: { untestable: true, httpStatus: res401.status }
           };
         }
 
@@ -795,16 +840,17 @@ export class ServerStatelessScenario implements ClientScenario {
           };
         }
 
-        // If the call was rejected outright (e.g. the diagnostic tool does
-        // not exist), nothing was streamed and the requirement was not
-        // exercised - report SKIPPED rather than a vacuous SUCCESS.
+        // If the call was rejected outright, nothing was streamed and the
+        // requirement could not be exercised — fail with the cause rather
+        // than reporting a vacuous SUCCESS or an invisible SKIPPED.
         if (frames.every((f) => f?.error !== undefined)) {
           return {
-            skipped: true,
-            details: {
-              note: 'Server does not expose diagnostic tool test_streaming_elicitation; the response stream could not be exercised.',
-              response: frames[0]
-            }
+            error: notTestable(
+              listedToolNames.includes('test_streaming_elicitation')
+                ? `the 'test_streaming_elicitation' call was rejected (code ${frames[0]?.error?.code}), so the response stream could not be exercised`
+                : "server does not list the diagnostic tool 'test_streaming_elicitation' in tools/list, so the response stream could not be exercised"
+            ),
+            details: { untestable: true, response: frames[0] }
           };
         }
 
@@ -841,17 +887,17 @@ export class ServerStatelessScenario implements ClientScenario {
           };
         }
 
-        // If the call was rejected outright (e.g. the diagnostic tool does
-        // not exist), the server never had anything to log and the
-        // requirement was not exercised - report SKIPPED rather than a
-        // vacuous SUCCESS.
+        // If the call was rejected outright, the server never had anything
+        // to log and the requirement could not be exercised — fail with the
+        // cause rather than reporting a vacuous SUCCESS or invisible SKIPPED.
         if (frames.every((f) => f?.error !== undefined)) {
           return {
-            skipped: true,
-            details: {
-              note: 'Server does not expose diagnostic tool test_logging_tool; the no-log-without-logLevel requirement could not be exercised.',
-              response: frames[0]
-            }
+            error: notTestable(
+              listedToolNames.includes('test_logging_tool')
+                ? `the 'test_logging_tool' call was rejected (code ${frames[0]?.error?.code}), so the no-log-without-logLevel requirement could not be exercised`
+                : "server does not list the diagnostic tool 'test_logging_tool' in tools/list, so the no-log-without-logLevel requirement could not be exercised"
+            ),
+            details: { untestable: true, response: frames[0] }
           };
         }
 
@@ -872,6 +918,41 @@ export class ServerStatelessScenario implements ClientScenario {
     // ==========================================
     // 6. Subscription Streams & Filtering (3 Checks)
     // ==========================================
+    // A server that advertises no subscription-delivered capability has
+    // nothing to serve on subscriptions/listen, so a -32601 there is a
+    // legitimate feature absence (SKIPPED). A server that DOES advertise
+    // listChanged/subscribe but rejects the method fails: it claims a
+    // feature it does not serve.
+    const advertisesSubscriptions = !!(
+      discoverCapabilities?.tools?.listChanged ||
+      discoverCapabilities?.prompts?.listChanged ||
+      discoverCapabilities?.resources?.listChanged ||
+      discoverCapabilities?.resources?.subscribe
+    );
+    // The legitimate skip requires an OBSERVED advertisement: when
+    // server/discover itself failed, nothing is known about the server's
+    // capabilities and the gap must not read as an intentional absence.
+    const discoverObserved = !discoverRpcError && discoverResult != null;
+    const listenRejected = (frames: any[]) => {
+      if (frames[0]?.error?.code !== -32601) return null;
+      if (discoverObserved && !advertisesSubscriptions) {
+        return {
+          skipped: true,
+          details: {
+            note: 'Server advertises no subscription-delivered capability; subscriptions/listen is not applicable.'
+          }
+        };
+      }
+      return {
+        error: notTestable(
+          advertisesSubscriptions
+            ? 'server advertises listChanged/subscribe capabilities but answers subscriptions/listen with -32601 (Method not found)'
+            : 'server/discover was not observed, so the -32601 on subscriptions/listen cannot be attributed to an intentionally absent capability'
+        ),
+        details: { untestable: true, response: frames[0] }
+      };
+    };
+
     const subscriptionParams = {
       _meta: validMeta,
       notifications: { toolsListChanged: true }
@@ -904,14 +985,8 @@ export class ServerStatelessScenario implements ClientScenario {
       'ServerSendsSubscriptionAck',
       'notifications/subscriptions/acknowledged is the first message on a subscriptions/listen stream',
       () => {
-        if (streamFrames[0]?.error?.code === -32601) {
-          return {
-            skipped: true,
-            details: {
-              note: 'Server does not support subscriptions/listen (Method not found)'
-            }
-          };
-        }
+        const rejectedStream = listenRejected(streamFrames);
+        if (rejectedStream) return rejectedStream;
         if (streamFrames.length === 0) {
           return {
             error:
@@ -934,14 +1009,8 @@ export class ServerStatelessScenario implements ClientScenario {
       'ServerTagsSubscriptionId',
       'Listen-stream notifications carry _meta.../subscriptionId',
       () => {
-        if (streamFrames[0]?.error?.code === -32601) {
-          return {
-            skipped: true,
-            details: {
-              note: 'Server does not support subscriptions/listen (Method not found)'
-            }
-          };
-        }
+        const rejectedStream = listenRejected(streamFrames);
+        if (rejectedStream) return rejectedStream;
         if (streamFrames.length === 0) {
           return {
             error:
@@ -1015,14 +1084,8 @@ export class ServerStatelessScenario implements ClientScenario {
           }
         );
 
-        if (narrowFrames[0]?.error?.code === -32601) {
-          return {
-            skipped: true,
-            details: {
-              note: 'Server does not support subscriptions/listen (Method not found)'
-            }
-          };
-        }
+        const rejectedNarrow = listenRejected(narrowFrames);
+        if (rejectedNarrow) return rejectedNarrow;
         if (narrowFrames.length === 0) {
           return {
             error:
@@ -1086,11 +1149,13 @@ export class ServerStatelessScenario implements ClientScenario {
           }
         );
         if (trigger?.data?.error?.code === -32601) {
+          // SHOULD-level requirement, so the untestable report is a WARNING.
           return {
-            skipped: true,
-            details: {
-              note: 'Server does not expose diagnostic hook test_trigger_prompt_change to mutate lists'
-            }
+            warning: true,
+            error: notTestable(
+              "server declares prompts.listChanged but does not expose the diagnostic hook 'test_trigger_prompt_change' to mutate the prompt list"
+            ),
+            details: { untestable: true }
           };
         }
 
@@ -1154,11 +1219,13 @@ export class ServerStatelessScenario implements ClientScenario {
           }
         );
         if (trigger?.data?.error?.code === -32601) {
+          // SHOULD-level requirement, so the untestable report is a WARNING.
           return {
-            skipped: true,
-            details: {
-              note: 'Server does not expose diagnostic hook test_trigger_tool_change to mutate lists'
-            }
+            warning: true,
+            error: notTestable(
+              "server declares tools.listChanged but does not expose the diagnostic hook 'test_trigger_tool_change' to mutate the tool list"
+            ),
+            details: { untestable: true }
           };
         }
 
@@ -1185,12 +1252,26 @@ export class ServerStatelessScenario implements ClientScenario {
     );
 
     if (!checks.some((c) => c.id === 'sep-2575-http-server-error-jsonrpc-id')) {
+      // Only report SUCCESS when at least one error response was actually
+      // observed; a server that never produced an error response (because it
+      // wrongly accepted every invalid probe) must not collect a vacuous pass
+      // for the id-echo requirement on top of its other failures.
       checks.push({
         id: 'sep-2575-http-server-error-jsonrpc-id',
         name: 'HttpServerErrorJsonrpcId',
         description: 'All error responses carry the request JSON-RPC id',
-        status: 'SUCCESS',
+        status: errorResponsesObserved > 0 ? 'SUCCESS' : 'FAILURE',
         timestamp,
+        errorMessage:
+          errorResponsesObserved > 0
+            ? undefined
+            : notTestable(
+                'no error responses were observed across the probes, so the id-echo requirement could not be validated'
+              ),
+        details:
+          errorResponsesObserved > 0
+            ? { errorResponsesObserved }
+            : { untestable: true, errorResponsesObserved },
         specReferences: SPEC_REF
       });
     }
