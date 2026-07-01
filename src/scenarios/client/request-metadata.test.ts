@@ -26,7 +26,7 @@ async function badClient(serverUrl: string) {
 }
 
 const goodMeta = {
-  'io.modelcontextprotocol/protocolVersion': 'DRAFT-2026-v1',
+  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientInfo': { name: 'test', version: '1.0' },
   'io.modelcontextprotocol/clientCapabilities': {}
 };
@@ -70,7 +70,7 @@ async function nonRetryingClient(serverUrl: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'MCP-Protocol-Version': 'DRAFT-2026-v1'
+      'MCP-Protocol-Version': '2026-07-28'
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -105,7 +105,7 @@ async function incompatibleVersionClient(serverUrl: string) {
 
   if (response.status === 400) {
     const body = await response.json();
-    if (body.error?.code === -32004) {
+    if (body.error?.code === -32022) {
       return body; // Abort cleanly
     }
   }
@@ -118,7 +118,7 @@ async function malformedCapabilitiesClient(serverUrl: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'MCP-Protocol-Version': 'DRAFT-2026-v1'
+      'MCP-Protocol-Version': '2026-07-28'
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
