@@ -59,14 +59,16 @@ The scope-challenge scenario is blind to both provider and SUT — you point it 
 a server-under-test URL with the context blob above. Run it against **both** SUTs
 to produce cross-SDK evidence:
 
-- **mcpkit (Go)**: `panyam/mcpkit` `examples/auth/step-up-okta` — verifier pointed
-  at this issuer + JWKS.
-- **TS PR 1624**: `panyam/mcp-ts-sdk` `demo/scope-challenge-*` — same, repointed
-  from Keycloak to this issuer.
+- **TS PR 1624**: `panyam/mcp-ts-sdk` `examples/server/src/scopeChallenge.ts` — `ISSUER="$OKTA_ISSUER" AUDIENCE=api://default tsx src/scopeChallenge.ts`.
+- **mcpkit (Go)**: `panyam/mcpkit` `examples/auth/step-up` — `go run ./examples/auth/step-up -issuer "$OKTA_ISSUER" -audience api://default`.
+
+Both are provider-neutral SUTs; only `ISSUER`/`AUDIENCE` differ from the Keycloak run.
 
 ```bash
+source okta.env
 export MCP_CONFORMANCE_CONTEXT="$(make -s tokens-context)"
-# then run the scope-challenge scenario against each SUT's /mcp URL
+# then run the scope-challenge scenario against the SUT's /mcp URL:
+#   node <conf-auth>/dist/index.js server --url http://localhost:3100/mcp --scenario scope-challenge
 ```
 
 ## Teardown

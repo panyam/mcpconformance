@@ -27,7 +27,7 @@ make tokens    # prints insufficient + sufficient tokens for a quick eyeball
 
 ### Terminal 2: PR 1624's reference server, wired to Keycloak
 
-The conformance fork ships a Keycloak-validating SUT in [`panyam/mcp-ts-sdk` on the `demo/scope-challenge-keycloak` branch](https://github.com/panyam/mcp-ts-sdk/tree/demo/scope-challenge-keycloak). That branch is forked from `modelcontextprotocol/typescript-sdk` and rebased on PR 1624's branch, with one example file added (`examples/server/src/scope-challenge-keycloak.ts`) and `jose` added to `examples/server/package.json` for JWKS-aware JWT verification.
+The fork ships a provider-neutral SUT in [`panyam/mcp-ts-sdk` on the `demo/scope-challenge-keycloak` branch](https://github.com/panyam/mcp-ts-sdk/tree/demo/scope-challenge-keycloak). That branch is forked from `modelcontextprotocol/typescript-sdk` and rebased on PR 1624's branch, with one example file added (`examples/server/src/scopeChallenge.ts`) and `jose` added to `examples/server/package.json` for JWKS-aware JWT verification. The same SUT drives any AS by pointing `ISSUER` at it (see the okta fixture for the Okta invocation).
 
 ```bash
 cd ..   # parent of conf-auth
@@ -37,11 +37,12 @@ git checkout demo/scope-challenge-keycloak
 pnpm install && pnpm run build:all
 
 # Start the SUT. Note the env var: Keycloak runs on http://localhost,
-# so the issuer URL bypass is required.
+# so the issuer URL bypass is required. ISSUER defaults to this realm.
 MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL=true \
+  ISSUER=http://localhost:8180/realms/mcpkit-test \
   pnpm --filter @modelcontextprotocol/examples-server exec \
-  tsx src/scope-challenge-keycloak.ts
-# → pr1624-keycloak SUT listening on http://localhost:3100/mcp
+  tsx src/scopeChallenge.ts
+# → pr1624-scope-challenge SUT listening on http://localhost:3100/mcp
 ```
 
 ### Terminal 3: run the conformance scenario
