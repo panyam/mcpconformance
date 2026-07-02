@@ -210,6 +210,7 @@ Run `npx @modelcontextprotocol/conformance list --server` to see all available s
 - **tools-call-\*** - Various tool invocation scenarios
 - **resources-\*** - Resource management scenarios
 - **prompts-\*** - Prompt management scenarios
+- **scope-challenge** - Tests SEP-2350 / RFC 6750 §3.1 server-side scope-challenge handshake (403 + `WWW-Authenticate`). Operator-driven token issuance via `MCP_CONFORMANCE_CONTEXT`; see [`examples/auth-fixtures/keycloak/`](examples/auth-fixtures/keycloak/README.md) for the recommended fixture.
 
 ## Running Against an SDK at a Specific Ref
 
