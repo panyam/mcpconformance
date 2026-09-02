@@ -188,6 +188,25 @@ export function scopeSet(value: string | null | undefined): Set<string> {
 }
 
 /** Set-equality on two OAuth scope strings (order-independent). */
+/**
+ * True when `advertised` contains every scope in `required`.
+ *
+ * This, not set equality, is the normative floor. The spec (2025-11-25
+ * Authorization, "Server Scope Management") leaves the inclusion strategy to
+ * the server and describes three, of which it calls the union with the
+ * caller's existing grants the *recommended* one. Asserting equality would
+ * therefore report a server following the spec's own recommendation as
+ * non-compliant.
+ */
+export function scopesContainAll(
+  advertised: string | null | undefined,
+  required: string | null | undefined
+): boolean {
+  const adv = scopeSet(advertised);
+  for (const s of scopeSet(required)) if (!adv.has(s)) return false;
+  return true;
+}
+
 export function scopesEqual(
   a: string | null | undefined,
   b: string | null | undefined
@@ -494,25 +513,38 @@ export class ScopeChallengeScenario implements ClientScenario {
           )
     );
 
-    const advertisesRequiredOnly =
-      scopeParam !== null && scopesEqual(scopeParam, scenarioCtx.requiredScope);
+    // The spec requires the challenge to carry the scopes the operation needs.
+    // It does NOT require them to be the only ones: § Server Scope Management
+    // offers minimum, recommended (union with existing grants) and extended
+    // strategies, and explicitly recommends the second. So the assertion is
+    // containment, and which strategy the server chose is reported as evidence
+    // rather than graded.
+    const carriesRequired =
+      scopeParam !== null &&
+      scopesContainAll(scopeParam, scenarioCtx.requiredScope);
+    const strategy =
+      scopeParam === null
+        ? 'none'
+        : scopesEqual(scopeParam, scenarioCtx.requiredScope)
+          ? 'minimum (per-operation required only)'
+          : 'superset (union with granted/related scopes)';
     checks.push(
-      advertisesRequiredOnly
+      carriesRequired
         ? check(
             CHECK_SCOPE_REQUIRED_ONLY,
-            'scope= is per-operation required only',
-            'advertised scope is the per-operation required set, not unioned with the granted/accepted sets (least-privilege)',
+            "scope= carries the operation's required scopes",
+            `challenge advertises every scope the operation needs; inclusion strategy: ${strategy}`,
             'SUCCESS'
           )
         : check(
             CHECK_SCOPE_REQUIRED_ONLY,
-            'scope= is per-operation required only',
-            'advertised scope is the per-operation required set, not unioned with the granted/accepted sets (least-privilege)',
+            "scope= carries the operation's required scopes",
+            'challenge must advertise every scope the operation needs (inclusion of further scopes is permitted)',
             'WARNING',
             scopeParam === null
               ? 'no scope param to inspect'
-              : `expected scope="${scenarioCtx.requiredScope}", got scope="${scopeParam}"`,
-            { scope: scopeParam, expected: scenarioCtx.requiredScope }
+              : `expected scope= to contain "${scenarioCtx.requiredScope}", got scope="${scopeParam}"`,
+            { scope: scopeParam, expected: scenarioCtx.requiredScope, strategy }
           )
     );
 
