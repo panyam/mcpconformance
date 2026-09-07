@@ -15,7 +15,12 @@
  *                          (default '' = no accepted-hierarchy semantics)
  *   REQUIRED_SCOPE       - scope advertised in WWW-Authenticate (default 'admin-write')
  *   SCOPE_GATED_TOOL     - tool name that requires the scope (default 'admin_call')
- *   RESOURCE_METADATA    - PRM URL advertised in WWW-Authenticate (default unset, omits the param)
+ *   RESOURCE_METADATA    - PRM URL advertised in WWW-Authenticate. Defaults to this
+ *                          server's own /.well-known/oauth-protected-resource/mcp,
+ *                          which it serves. Set to the empty string to omit the
+ *                          param and exercise the scenario's WARNING path.
+ *   ISSUER               - authorization server URL listed in the PRM document
+ *                          (default unset, omits authorization_servers)
  *
  * Intentionally not for production. The token comparison is exact-string,
  * the JWT is never decoded, and no JSON-RPC envelope is fully validated.
@@ -30,7 +35,19 @@ const INSUFFICIENT_TOKEN = process.env.INSUFFICIENT_TOKEN || 'insufficient';
 const ACCEPTED_TOKEN = process.env.ACCEPTED_TOKEN || '';
 const REQUIRED_SCOPE = process.env.REQUIRED_SCOPE || 'admin-write';
 const SCOPE_GATED_TOOL = process.env.SCOPE_GATED_TOOL || 'admin_call';
-const RESOURCE_METADATA = process.env.RESOURCE_METADATA || '';
+const ISSUER = process.env.ISSUER || '';
+
+// RFC 9728 §3.1 inserts the resource path between the well-known prefix and the
+// path, so a resource at /mcp advertises .../oauth-protected-resource/mcp.
+const PRM_PATH = '/.well-known/oauth-protected-resource/mcp';
+const SELF = `http://localhost:${PORT}`;
+
+// Explicit undefined check rather than `||`, so RESOURCE_METADATA= (empty)
+// omits the param instead of falling back to the default.
+const RESOURCE_METADATA =
+  process.env.RESOURCE_METADATA !== undefined
+    ? process.env.RESOURCE_METADATA
+    : `${SELF}${PRM_PATH}`;
 
 function quoteAuthParam(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -54,6 +71,18 @@ function buildChallenge(): string {
 
 const app = express();
 app.use(express.json());
+
+// Serve the document the challenge points at. The scenario's PRM-link check
+// only reads the auth-param and never dereferences it, but advertising a URL
+// that 404s is worse than advertising nothing, and this file gets copied.
+app.get(PRM_PATH, (_req, res) => {
+  const prm: Record<string, unknown> = {
+    resource: `${SELF}/mcp`,
+    scopes_supported: [REQUIRED_SCOPE]
+  };
+  if (ISSUER) prm.authorization_servers = [ISSUER];
+  res.json(prm);
+});
 
 app.post('/mcp', (req, res) => {
   const body = req.body ?? {};
@@ -146,6 +175,9 @@ app.listen(PORT, () => {
   console.log(`  sufficient token: ${SUFFICIENT_TOKEN}`);
   console.log(`  insufficient token: ${INSUFFICIENT_TOKEN}`);
   if (ACCEPTED_TOKEN) console.log(`  accepted token: ${ACCEPTED_TOKEN}`);
-  if (RESOURCE_METADATA)
-    console.log(`  resource_metadata: ${RESOURCE_METADATA}`);
+  console.log(
+    RESOURCE_METADATA
+      ? `  resource_metadata: ${RESOURCE_METADATA}`
+      : `  resource_metadata: (omitted)`
+  );
 });
