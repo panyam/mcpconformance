@@ -20,14 +20,19 @@ parent-scope token, assert 2xx) rather than an assertion about SDK config.
 
 ## Matrix
 
-All cells re-verified **2026-08-29**.
+All cells re-verified **2026-08-29** except FusionAuth (first run **2026-08-31**).
 
-| SDK ↓ / Provider →                                                            | Keycloak | Okta   | Descope | Entra | WorkOS |
-| ----------------------------------------------------------------------------- | -------- | ------ | ------- | ----- | ------ |
-| **TypeScript (PR 1624 ref)** — `panyam/mcp-ts-sdk` `examples/scope-challenge` | ✅ 9/9   | ✅ 9/9 | —       | —     | —      |
-| **mcpkit (Go)** — `panyam/mcpkit` `examples/auth/step-up`                     | ✅ 9/9   | ✅ 9/9 | —       | —     | —      |
+| SDK ↓ / Provider →                                                            | Keycloak | Okta   | FusionAuth | Descope | Entra | WorkOS |
+| ----------------------------------------------------------------------------- | -------- | ------ | ---------- | ------- | ----- | ------ |
+| **TypeScript (PR 1624 ref)** — `panyam/mcp-ts-sdk` `examples/scope-challenge` | ✅ 9/9   | ✅ 9/9 | —          | —       | —     | —      |
+| **mcpkit (Go)** — `panyam/mcpkit` `examples/auth/step-up`                     | ✅ 9/9   | ✅ 9/9 | —          | —       | —     | —      |
+| **scope-challenge-server.ts** (string-match SUT)                              | ✅ 8/8   | —      | ✅ 8/8     | —       | —     | —      |
 
 Legend: ✅ N/9 = checks passing · — = not yet run · ⚠️ = partial (see notes).
+
+The FusionAuth column uses `scope-challenge-server.ts` (exact bearer token string
+comparison) rather than a JWT-validating SUT. See the FusionAuth provider note
+below for why.
 
 The TypeScript SUT is pinned at tag
 [`sut/verified-20260829`](https://github.com/panyam/mcp-ts-sdk/tree/sut/verified-20260829/examples/scope-challenge)
@@ -74,6 +79,7 @@ folding into the scenario as a tenth check if the WG wants it graded.
 
 - **Keycloak** — local docker fixture (`keycloak/`), hermetic. Scopes in the `scope` claim (string); no `aud` on client_credentials.
 - **Okta** — real tenant fixture (`okta/`), custom authorization server. Scopes in the `scp` claim (array); sets `aud=api://default`. Surfacing `scp` support was a real SDK fix in both mcpkit and the TS SUT. `provision` needs an SSWS admin token, which Okta expires after 30 days of inactivity; a stale one shows up as `401: Invalid token provided` on the first API call.
+- **FusionAuth** — local docker fixture (`fusionauth/`), hermetic. Uses Entity Management for `client_credentials`; scopes appear as `target-entity:<uuid>:<permission>` rather than free-form strings like `admin-write`. A JWT-validating SUT pointed at FusionAuth would need to map entity permissions to its internal scope model — the JWT-validating TS and Go SUTs have not been tested against this fixture for that reason. The `scope-challenge-server.ts` SUT uses exact bearer token string comparison so the token format is transparent to it. Requires a FusionAuth paid plan (Starter or higher). The FusionAuth column uses `scope-challenge-server.ts` only (8/8; the 9th OR-hierarchy check fires as SUCCESS but is reported as 8/8 since the reference SUT declares `accepted` statically and both pass).
 - **Descope / Entra / WorkOS** — not yet run. Each needs to mint a custom scope into a JWKS-verifiable access token over a machine grant; add a `<provider>/` fixture mirroring `okta/` and fill the column.
 
 Offers of a fixture that have not yet been taken up: Kevin Gao (Descope,

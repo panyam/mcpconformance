@@ -1,0 +1,89 @@
+{
+  "variables": {
+    "licenseKey": "#{ENV.FUSIONAUTH_LICENSE_KEY}",
+    "apiKey": "mcp-test-api-key-dev-only",
+    "entityTypeId": "b1b2c3d4-0001-0001-0001-000000000001",
+    "targetEntityId": "b1b2c3d4-0002-0002-0002-000000000001",
+    "clientEntityId": "b1b2c3d4-0003-0003-0003-000000000001",
+    "clientSecret": "mcp-test-secret-for-client-entity"
+  },
+  "apiKeys": [
+    {
+      "key": "#{apiKey}",
+      "description": "Dev-only API key for the MCP conformance fixture. Do not use in production."
+    }
+  ],
+  "requests": [
+    {
+      "method": "POST",
+      "url": "/api/reactor",
+      "body": {
+        "licenseId": "#{licenseKey}"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/entity/type/#{entityTypeId}",
+      "body": {
+        "entityType": {
+          "name": "mcp-resource",
+          "permissions": [
+            {
+              "name": "tools-read",
+              "description": "Read-only access to MCP tools"
+            },
+            {
+              "name": "tools-call",
+              "description": "Permission to invoke MCP tools"
+            },
+            {
+              "name": "admin-write",
+              "description": "Admin write access — the scope-gated tool requires this"
+            },
+            {
+              "name": "admin",
+              "description": "Parent admin scope — OR-hierarchy parent of admin-write in the scope-challenge SUT"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/entity/#{targetEntityId}",
+      "body": {
+        "entity": {
+          "name": "mcp-resource-server",
+          "tenantId": "#{FUSIONAUTH_TENANT_ID}",
+          "type": {
+            "id": "#{entityTypeId}"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/entity/#{clientEntityId}",
+      "body": {
+        "entity": {
+          "name": "mcp-client",
+          "tenantId": "#{FUSIONAUTH_TENANT_ID}",
+          "type": {
+            "id": "#{entityTypeId}"
+          },
+          "clientSecret": "#{clientSecret}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/entity/#{targetEntityId}/grant",
+      "body": {
+        "grant": {
+          "recipientEntityId": "#{clientEntityId}",
+          "permissions": ["tools-read", "tools-call", "admin-write", "admin"]
+        }
+      }
+    }
+  ]
+}

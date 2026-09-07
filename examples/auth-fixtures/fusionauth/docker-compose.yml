@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fusionauth
+      POSTGRES_PASSWORD: fusionauth
+      POSTGRES_DB: fusionauth
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fusionauth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  fusionauth:
+    image: fusionauth/fusionauth-app:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/fusionauth
+      DATABASE_ROOT_USERNAME: fusionauth
+      DATABASE_ROOT_PASSWORD: fusionauth
+      DATABASE_USERNAME: fusionauth
+      DATABASE_PASSWORD: fusionauth
+      FUSIONAUTH_APP_MEMORY: 512M
+      FUSIONAUTH_APP_RUNTIME_MODE: development
+      FUSIONAUTH_APP_KICKSTART_FILE: /usr/local/fusionauth/kickstart/kickstart.json
+      SEARCH_TYPE: database
+      FUSIONAUTH_LICENSE_KEY: ${FUSIONAUTH_LICENSE_KEY}
+    ports:
+      - '${FA_PORT:-9011}:9011'
+    volumes:
+      - ./kickstart.json:/usr/local/fusionauth/kickstart/kickstart.json:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:9011/api/status >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
