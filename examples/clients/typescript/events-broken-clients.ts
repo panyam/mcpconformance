@@ -23,7 +23,9 @@ export const dropsTruncatedCursor = broken({ persistTruncatedCursor: false });
 export const replaysNullCursor = broken({ replayNullCursor: true });
 export const failsOnAbsentCursor = broken({ tolerateAbsentCursor: false });
 export const ignoresListChanged = broken({ relistOnListChanged: false });
+// Not broken: listen is optional, so both listen rows skip for this client.
 export const neverListens = broken({ listenForListChanged: false });
+export const listensWithoutOptIn = broken({ optInToEventsListChanged: false });
 export const refreshesAfterExpiry = broken({ refreshBeforeExpiry: false });
 export const neverReconnects = broken({ reconnectDeadStream: false });
 export const omitsMcpName = broken({ sendMcpName: false });
