@@ -42,6 +42,11 @@ export interface EventsClientOptions {
    * channel `notifications/events/list_changed` travels on.
    */
   listenForListChanged: boolean;
+  /**
+   * When false, the listen stream above opens without `eventsListChanged`, so
+   * it never carries `notifications/events/list_changed`.
+   */
+  optInToEventsListChanged: boolean;
   /** When false, refresh a webhook subscription only after it has expired. */
   refreshBeforeExpiry: boolean;
   /** When false, never reconnect a silent push stream. */
@@ -66,6 +71,7 @@ export const CONFORMANT: EventsClientOptions = {
   tolerateAbsentCursor: true,
   relistOnListChanged: true,
   listenForListChanged: true,
+  optInToEventsListChanged: true,
   refreshBeforeExpiry: true,
   reconnectDeadStream: true,
   sendMcpName: true,
@@ -514,7 +520,11 @@ export function makeEventsClient(
         background.push(
           rpc
             .stream(
-              { notifications: { eventsListChanged: true } },
+              {
+                notifications: opts.optInToEventsListChanged
+                  ? { eventsListChanged: true }
+                  : {}
+              },
               onListChanged,
               stopper.signal,
               'subscriptions/listen'

@@ -300,7 +300,13 @@ export class EventsClientPollScenario extends EventsClientScenarioBase {
     const OPTIN_ID = 'sep-3415-client-listen-opt-in';
     const OPTIN_DESC =
       '`notifications/events/list_changed` is delivered only on a `subscriptions/listen` stream, and only when the client opted in with `eventsListChanged`.';
-    const optedIn = this.requestsFor(SUBSCRIPTIONS_LISTEN_METHOD).some(
+    const listens = this.requestsFor(SUBSCRIPTIONS_LISTEN_METHOD);
+    // `subscriptions/listen` is optional, so a client that never opens one
+    // has nothing to grade here; one that opens it without the filter does.
+    const noListen = this.stateless() && listens.length === 0;
+    const NO_LISTEN =
+      'The client never opened `subscriptions/listen`, which SEP-3415 leaves optional.';
+    const optedIn = listens.some(
       (r) =>
         (r.params.notifications as Record<string, unknown> | undefined)?.[
           EVENTS_LIST_CHANGED_FILTER_KEY
@@ -312,13 +318,17 @@ export class EventsClientPollScenario extends EventsClientScenarioBase {
             errorMessage:
               'The client used the legacy lifecycle, which SEP-3415 does not cover; the notification travels on the session GET stream there.'
           })
-        : graded(
-            OPTIN_ID,
-            OPTIN_DESC,
-            optedIn,
-            'WARNING',
-            'The server declared `listChanged: true` and the client never opened `subscriptions/listen` with `eventsListChanged: true`, so it can never learn that the event types changed.'
-          )
+        : noListen
+          ? eventsCheck(OPTIN_ID, OPTIN_DESC, 'SKIPPED', {
+              errorMessage: NO_LISTEN
+            })
+          : graded(
+              OPTIN_ID,
+              OPTIN_DESC,
+              optedIn,
+              'WARNING',
+              'The server declared `listChanged: true` and the client never opened `subscriptions/listen` with `eventsListChanged: true`, so it can never learn that the event types changed.'
+            )
     );
 
     const RELIST_ID = 'sep-3415-client-relist-on-list-changed';
@@ -332,15 +342,19 @@ export class EventsClientPollScenario extends EventsClientScenarioBase {
           ? 'the client never opened `subscriptions/listen` with `eventsListChanged`, so the notification had no channel to arrive on'
           : 'the client never opened the session GET stream, so the notification had no channel to arrive on';
     checks.push(
-      sentAt === undefined
-        ? clientUntestable(RELIST_ID, RELIST_DESC, undelivered, 'WARNING')
-        : graded(
-            RELIST_ID,
-            RELIST_DESC,
-            this.requestsFor(EVENTS_LIST_METHOD).some((r) => r.at >= sentAt),
-            'WARNING',
-            'The client received `notifications/events/list_changed` and never called `events/list` again.'
-          )
+      sentAt === undefined && ticks.length >= 5 && noListen
+        ? eventsCheck(RELIST_ID, RELIST_DESC, 'SKIPPED', {
+            errorMessage: NO_LISTEN
+          })
+        : sentAt === undefined
+          ? clientUntestable(RELIST_ID, RELIST_DESC, undelivered, 'WARNING')
+          : graded(
+              RELIST_ID,
+              RELIST_DESC,
+              this.requestsFor(EVENTS_LIST_METHOD).some((r) => r.at >= sentAt),
+              'WARNING',
+              'The client received `notifications/events/list_changed` and never called `events/list` again.'
+            )
     );
 
     const NULL_ID = 'sep-3415-client-null-cursor-not-replayed';

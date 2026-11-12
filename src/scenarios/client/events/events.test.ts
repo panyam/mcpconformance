@@ -118,10 +118,10 @@ describe.concurrent('events client scenarios', () => {
       'events-client-poll',
       ['sep-3415-client-relist-on-list-changed']
     ],
-    // With no listen stream the notification has no channel, so the re-list
-    // row reports untestable alongside the opt-in row.
+    // Listening without the filter leaves the notification no channel, so the
+    // re-list row reports untestable alongside the opt-in row.
     [
-      'neverListens',
+      'listensWithoutOptIn',
       'events-client-poll',
       [
         'sep-3415-client-listen-opt-in',
@@ -193,6 +193,24 @@ describe.concurrent('events client scenarios', () => {
         version
       );
       expect(red(checks)).toEqual([...expected].sort());
+    },
+    TIMEOUT
+  );
+
+  // `subscriptions/listen` is optional, so a client that never opens it
+  // skips both listen rows rather than turning them red.
+  test(
+    'neverListens against events-client-poll skips the listen rows',
+    async () => {
+      const checks = await run(
+        broken.neverListens,
+        'events-client-poll',
+        DRAFT_PROTOCOL_VERSION
+      );
+      const status = (id: string) => checks.find((c) => c.id === id)?.status;
+      expect(status('sep-3415-client-listen-opt-in')).toBe('SKIPPED');
+      expect(status('sep-3415-client-relist-on-list-changed')).toBe('SKIPPED');
+      expect(red(checks)).toEqual([]);
     },
     TIMEOUT
   );
