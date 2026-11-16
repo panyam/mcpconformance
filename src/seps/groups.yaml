@@ -1,0 +1,59 @@
+# spec_source: modelcontextprotocol/progressive-disclosure-wg@15b2a5cf seps/0000-progressive-disclosure-groups.md
+#   (WG PR 19, "sep: add progressive disclosure via groups proposal")
+# extracted: 2026-11-16
+#
+# The extension has no SEP number yet, so this file is groups.yaml and the
+# check IDs use a `groups-` prefix. src/traceability reads only
+# sep-<number>.yaml, so it ignores this file until then. When the SEP is
+# numbered, rename the file to sep-<number>.yaml, set `sep:`, and rename the
+# check IDs to sep-<number>-*.
+spec_url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md
+requirements:
+  # === groups/list ===
+  - check: groups-list-result
+    text: 'Servers respond to `groups/list` with a cursor-paginated array of `Group` metadata.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupslist
+  - check: groups-list-no-contents
+    text: "A `Group` carries only lightweight fields (`name`, `title`, `description`); a group's scoped tools, prompts, resources, and nested groups are never part of a list response and are returned only by `groups/get`."
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupslist
+
+  # === The Group object ===
+  - check: groups-group-fields
+    text: 'export interface Group { name: string; title?: string; description: string; _meta?: { [key: string]: unknown }; }'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#the-group-object
+  - check: groups-name-format
+    text: 'MUST be 1–64 characters, lowercase alphanumeric and hyphens, with no leading, trailing, or consecutive hyphens.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#the-group-object
+
+  # === groups/get ===
+  - check: groups-get-not-empty
+    text: 'A `GetGroupResult` MUST contain at least one of `instructions`, `tools`, `prompts`, `resources`, or `groups`; an empty response carries no meaning.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupsget
+  - check: groups-get-unknown-name
+    text: 'If no group with the requested `name` exists, the server MUST respond with error code `-32002` (Resource not found)'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupsget
+  - check: groups-get-tool-definitions
+    text: 'Tools scoped to this group, as complete `Tool` definitions with the fields a client needs to invoke them (e.g., `inputSchema`).'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupsget
+  - check: groups-get-resolves-reachable
+    text: '`groups/get` MUST accept the name of any group reachable from `groups/list`, not only top-level ones.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#nested-groups
+
+  # === Placement ===
+  - check: groups-scoped-tools-not-listed
+    text: 'Scoped tools MUST NOT appear in `tools/list` (see [Placement and naming]).'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#groupsget
+  - check: groups-flatten-for-plain-client
+    text: 'By default a server SHOULD **flatten** — list at top level every tool it intends such clients to use; it MAY instead **hide** a tool'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#graceful-degradation
+  - check: groups-scoped-tool-callable
+    text: "Every primitive a `groups/get` response returns is present for that caller and invokable through the ordinary methods (`tools/call`, `prompts/get`, `resources/read`), subject to the server's normal authorization."
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#placement-and-naming
+
+  # === Nested groups ===
+  - check: groups-nested-not-top-level
+    text: 'Within a single client view, a group is either **top-level**, listed in `groups/list`, or **nested**, listed in the `groups` of one or more parents — never both.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#nested-groups
+  - check: groups-nested-identical
+    text: 'Its `Group` object MUST be identical wherever it appears, and a client MUST register such a group only once.'
+    url: https://github.com/modelcontextprotocol/progressive-disclosure-wg/blob/15b2a5cf/seps/0000-progressive-disclosure-groups.md#nested-groups

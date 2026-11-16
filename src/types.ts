@@ -103,7 +103,8 @@ export const EXTENSION_IDS = [
   'io.modelcontextprotocol/auth/dpop',
   'io.modelcontextprotocol/auth/wif',
   'io.modelcontextprotocol/tasks',
-  'io.modelcontextprotocol/skills'
+  'io.modelcontextprotocol/skills',
+  'io.modelcontextprotocol/groups'
 ] as const;
 export type ExtensionId = (typeof EXTENSION_IDS)[number];
 

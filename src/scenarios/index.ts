@@ -63,6 +63,7 @@ import {
 import { SkillsDirectoryReadScenario } from './server/skills/directory';
 import { SkillsEnumerationScenario } from './server/skills/enumeration';
 import { SkillsManifestScenario } from './server/skills/manifest';
+import { GroupsScenario } from './server/groups/groups';
 
 import {
   PromptsListScenario,
@@ -166,7 +167,11 @@ const pendingClientScenariosList: ClientScenario[] = [
   // `npm start -- server --scenario sep-2640-skills-* --url <fixture>`.
   new SkillsDirectoryReadScenario(),
   new SkillsEnumerationScenario(),
-  new SkillsManifestScenario()
+  new SkillsManifestScenario(),
+
+  // Groups extension (progressive disclosure, WG draft). Pending for the same
+  // reason as skills: the everything-server does not implement it.
+  new GroupsScenario()
 ];
 
 // All client scenarios
@@ -223,6 +228,10 @@ const allClientScenariosList: ClientScenario[] = [
   new SkillsDirectoryReadScenario(),
   new SkillsEnumerationScenario(),
   new SkillsManifestScenario(),
+
+  // Groups extension (progressive disclosure, WG draft). Fixture-dependent;
+  // SKIPs cleanly when the extension is not declared.
+  new GroupsScenario(),
 
   // Prompts scenarios
   new PromptsListScenario(),
