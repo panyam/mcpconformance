@@ -139,6 +139,58 @@ describe('auth-oauth-discovery — PRM well-known locations', () => {
     );
   });
 
+  test('root-only server for a pathed resource passes path-based', async () => {
+    mockRoutes({
+      '/.well-known/oauth-protected-resource': prm(ORIGIN),
+      '/.well-known/oauth-authorization-server': AS_METADATA
+    });
+    const checks = await new AuthOAuthDiscoveryScenario().run(
+      testContext(`${ORIGIN}/mcp`)
+    );
+
+    const pb = check(checks, 'auth-oauth-discovery-prm-path-based');
+    expect(pb.status).toBe('SUCCESS');
+    expect(String(pb.details?.note)).toContain('not required');
+    expect(String(pb.details?.note)).toContain('is the root identifier');
+    expect(check(checks, 'auth-oauth-discovery-prm-root').status).toBe(
+      'SUCCESS'
+    );
+    expect(
+      checks.filter((c) => c.status === 'FAILURE' || c.status === 'WARNING')
+    ).toEqual([]);
+  });
+
+  test('root-only server carrying the path identifier: path-based passes, prm-root warns', async () => {
+    mockRoutes({
+      '/.well-known/oauth-protected-resource': prm(`${ORIGIN}/mcp`),
+      '/.well-known/oauth-authorization-server': AS_METADATA
+    });
+    const checks = await new AuthOAuthDiscoveryScenario().run(
+      testContext(`${ORIGIN}/mcp`)
+    );
+
+    const pb = check(checks, 'auth-oauth-discovery-prm-path-based');
+    expect(pb.status).toBe('SUCCESS');
+    expect(pb.errorMessage).toBeUndefined();
+    expect(String(pb.details?.note)).toContain('auth-oauth-discovery-prm-root');
+    expect(check(checks, 'auth-oauth-discovery-prm-root').status).toBe(
+      'WARNING'
+    );
+  });
+
+  test('pathed resource with a malformed root document still fails path-based', async () => {
+    mockRoutes({
+      '/.well-known/oauth-protected-resource': { body: { resource: ORIGIN } },
+      '/.well-known/oauth-authorization-server': AS_METADATA
+    });
+    const checks = await new AuthOAuthDiscoveryScenario().run(
+      testContext(`${ORIGIN}/mcp`)
+    );
+    expect(check(checks, 'auth-oauth-discovery-prm-path-based').status).toBe(
+      'FAILURE'
+    );
+  });
+
   test('pathed resource with neither document fails', async () => {
     mockRoutes({
       '/.well-known/oauth-authorization-server': AS_METADATA

@@ -147,7 +147,8 @@ export class AuthOAuthDiscoveryScenario implements ClientScenario {
   puts PRM at the path-based URL
   \`/.well-known/oauth-protected-resource{mcpPath}\`. The root URL
   \`/.well-known/oauth-protected-resource\` is then optional (MCP
-  2025-11-25 accepts either location).
+  2025-11-25 accepts either location). Likewise the path-based URL is
+  optional when the root URL is served, since clients fall back to it.
 - When the root URL is served, its \`resource\` SHOULD be the root
   identifier (RFC 9728 §3.2, §3.3); a mismatch is a WARNING.
 - The response Content-Type MUST be \`application/json\` (read from the
@@ -186,6 +187,7 @@ and scope step-up are separate scenarios.`;
     const rootProbe = await probePrm(rootUrl);
     const pathServedOk =
       pathProbe !== null && prmShapeErrors(pathProbe).length === 0;
+    const rootServedOk = prmShapeErrors(rootProbe).length === 0;
 
     // Check 1: PRM root. Required when the resource is root-pathed or the
     // path-based document is missing; INFO otherwise. When served, its
@@ -255,11 +257,14 @@ and scope step-up are separate scenarios.`;
     }
 
     // Check 2: PRM path-based variant reachable when mcpPath is non-root.
+    // Not required when the root document is served instead: MCP 2025-11-25
+    // accepts either location, and clients fall back to the root URL.
     {
       const id = 'auth-oauth-discovery-prm-path-based';
       const name = 'AuthOAuthDiscoveryPrmPathBased';
       const description =
-        'When the MCP endpoint has a non-root path, GET /.well-known/oauth-protected-resource{mcpPath} also returns 200 + RFC 9728 JSON (RFC 9728 §3.1)';
+        'When the MCP endpoint has a non-root path, GET /.well-known/oauth-protected-resource{mcpPath} returns 200 + RFC 9728 JSON (RFC 9728 §3.1); not required when the root PRM is served';
+      const pathResult = pathProbe?.result ?? null;
       if (pathProbe === null) {
         checks.push({
           id,
@@ -270,6 +275,31 @@ and scope step-up are separate scenarios.`;
           errorMessage:
             'MCP endpoint is root-pathed; path-based PRM not required by RFC 9728',
           specReferences: [RFC_9728_REF]
+        });
+      } else if (
+        (pathResult === null || pathResult.status !== 200) &&
+        rootServedOk
+      ) {
+        // prm-root owns the RFC 9728 §3.3 judgement on the root document's
+        // `resource`, so this check only mentions it.
+        const rootResource: string = rootProbe.result!.body.resource;
+        const resourceNote =
+          trimSlash(rootResource) === trimSlash(rootIdentifier)
+            ? `its resource "${rootResource}" is the root identifier, as RFC 9728 §3.3 requires`
+            : `its resource "${rootResource}" is not the root identifier "${rootIdentifier}"; auth-oauth-discovery-prm-root reports that RFC 9728 §3.3 mismatch`;
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'SUCCESS',
+          timestamp: new Date().toISOString(),
+          specReferences: [RFC_9728_REF, MCP_AUTH_REF],
+          details: {
+            url: pathProbe.url,
+            httpStatus: pathResult?.status,
+            rootUrl,
+            note: `path-based PRM not served (${pathResult === null ? pathProbe.error : `status ${pathResult.status}`}); not required because the root PRM at ${rootUrl} is served, and MCP 2025-11-25 accepts either well-known location (clients fall back to the root URL); ${resourceNote}`
+          }
         });
       } else if (pathProbe.result === null) {
         checks.push({
