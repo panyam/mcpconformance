@@ -37,6 +37,7 @@ import {
   SpecReference,
   DRAFT_PROTOCOL_VERSION
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 
 const SEP_2356_REF: SpecReference = {
   id: 'SEP-2356',
@@ -85,7 +86,8 @@ export class FileInputsScenario implements ClientScenario {
 - A property of \`{type: "array", items: {type: "string", format: "uri",
   "x-mcp-file": ...}}\` MUST accept an array of data URIs and decode each.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     // Two parallel sessions: one declares fileInputs, one doesn't.

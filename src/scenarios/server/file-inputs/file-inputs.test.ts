@@ -25,6 +25,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { testContext } from '../../../connection/testing';
 import { FileInputsScenario } from './file-inputs';
 import { waitForServerReady } from '../_shared/test-runner';
 
@@ -99,7 +100,7 @@ describeIfTarget('SEP-2356 File Inputs — server conformance', () => {
 
   for (const scenario of FILE_INPUTS_SCENARIOS) {
     it(`${scenario.name} — all checks succeed against fixture`, async () => {
-      const checks = await scenario.run(SERVER_URL!);
+      const checks = await scenario.run(testContext(SERVER_URL!));
       expect(checks.length).toBeGreaterThan(0);
       const failures = checks.filter(
         (c) => c.status === 'FAILURE' || c.status === 'WARNING'

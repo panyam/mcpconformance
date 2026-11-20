@@ -27,6 +27,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { testContext } from '../../../connection/testing';
 import {
   AuthEnterpriseManagedScenario,
   AuthIssParamScenario,
@@ -115,7 +116,7 @@ describeIfTarget('MCP Auth — server-side discovery conformance', () => {
 
   for (const scenario of AUTH_SCENARIOS) {
     it(`${scenario.name} — all checks succeed against fixture`, async () => {
-      const checks = await scenario.run(SERVER_URL!);
+      const checks = await scenario.run(testContext(SERVER_URL!));
       expect(checks.length).toBeGreaterThan(0);
       const failures = checks.filter(
         (c) => c.status === 'FAILURE' || c.status === 'WARNING'

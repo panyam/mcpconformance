@@ -4,9 +4,10 @@
  * Tests an MCP server that exposes the OAuth 2.0 discovery surface
  * required by the MCP authorization spec (2025-11-25):
  *
- *   - RFC 9728 Protected Resource Metadata at
- *     `/.well-known/oauth-protected-resource` (and the path-based
- *     variant when the resource has a non-root path).
+ *   - RFC 9728 Protected Resource Metadata at the path-based
+ *     `/.well-known/oauth-protected-resource{mcpPath}` when the
+ *     resource has a non-root path, and/or at the root
+ *     `/.well-known/oauth-protected-resource`.
  *   - RFC 8414 Authorization Server Metadata at
  *     `/.well-known/oauth-authorization-server`, exposed by the AS the
  *     server delegates to (often via a server-side proxy on the same
@@ -30,6 +31,7 @@ import {
   SpecReference,
   LATEST_SPEC_VERSION
 } from '../../../types';
+import type { RunContext } from '../../../connection';
 
 const RFC_9728_REF: SpecReference = {
   id: 'RFC-9728',
@@ -82,6 +84,55 @@ function pathOf(serverUrl: string): string {
   return new URL(serverUrl).pathname;
 }
 
+interface PrmProbe {
+  url: string;
+  result: FetchedJson | null;
+  error?: string;
+}
+
+async function probePrm(url: string): Promise<PrmProbe> {
+  try {
+    return { url, result: await fetchJson(url) };
+  } catch (error) {
+    return {
+      url,
+      result: null,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/** RFC 9728 shape errors for a fetched PRM; empty when it is usable. */
+function prmShapeErrors(p: PrmProbe): string[] {
+  const r = p.result;
+  if (r === null) return [p.error ?? 'request failed'];
+  const errs: string[] = [];
+  if (r.status !== 200) {
+    errs.push(`status MUST be 200; got ${r.status}`);
+  }
+  if (r.body === null) {
+    errs.push(`response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`);
+    return errs;
+  }
+  if (typeof r.body.resource !== 'string') {
+    errs.push('PRM MUST carry `resource` (string)');
+  }
+  if (
+    !Array.isArray(r.body.authorization_servers) ||
+    r.body.authorization_servers.length === 0 ||
+    r.body.authorization_servers.some((s: unknown) => typeof s !== 'string')
+  ) {
+    errs.push(
+      'PRM MUST carry `authorization_servers` (non-empty array of strings)'
+    );
+  }
+  return errs;
+}
+
+function trimSlash(s: string): string {
+  return s.replace(/\/+$/, '');
+}
+
 export class AuthOAuthDiscoveryScenario implements ClientScenario {
   name = 'auth-oauth-discovery';
   readonly source = { introducedIn: LATEST_SPEC_VERSION } as const;
@@ -90,13 +141,17 @@ export class AuthOAuthDiscoveryScenario implements ClientScenario {
 **Server Implementation Requirements:**
 
 **RFC 9728 — Protected Resource Metadata:**
-- The server MUST expose PRM at \`/.well-known/oauth-protected-resource\`
-  (root variant) returning JSON with \`resource\` and
-  \`authorization_servers\` fields.
-- When the MCP endpoint has a non-root path (e.g., \`/mcp\`), the server
-  MUST also expose the path-based variant at
-  \`/.well-known/oauth-protected-resource{mcpPath}\` (RFC 9728 §3.1).
-- The response Content-Type MUST be \`application/json\`.
+- The server MUST expose PRM returning JSON with \`resource\` and
+  \`authorization_servers\` fields at a well-known URL.
+- When the MCP endpoint has a non-root path (e.g., \`/mcp\`), RFC 9728 §3.1
+  puts PRM at the path-based URL
+  \`/.well-known/oauth-protected-resource{mcpPath}\`. The root URL
+  \`/.well-known/oauth-protected-resource\` is then optional (MCP
+  2025-11-25 accepts either location).
+- When the root URL is served, its \`resource\` SHOULD be the root
+  identifier (RFC 9728 §3.2, §3.3); a mismatch is a WARNING.
+- The response Content-Type MUST be \`application/json\` (read from the
+  path-based URL first, then the root URL).
 
 **RFC 8414 — Authorization Server Metadata:**
 - The Authorization Server advertised in PRM MUST expose AS metadata at
@@ -109,70 +164,87 @@ This scenario does no token flows — it verifies only that discovery is
 reachable, well-formed, and points at a conformant AS. Token validation
 and scope step-up are separate scenarios.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
     const origin = originOf(serverUrl);
     const mcpPath = pathOf(serverUrl);
 
-    // Check 1: PRM root reachable + valid shape.
-    let prmBody: any = null;
+    // RFC 9728 §3.1 builds the PRM URL by inserting the well-known suffix
+    // between host and path, so resource `https://host/mcp` lives at
+    // `/.well-known/oauth-protected-resource/mcp`. MCP 2025-11-25 lets a
+    // server use either that path URL or the root URL; clients try the
+    // path URL first and fall back to the root. Fetch both once and let
+    // checks 1-3 grade them.
+    const pathed = mcpPath !== '' && mcpPath !== '/';
+    const rootUrl = `${origin}/.well-known/oauth-protected-resource`;
+    const pathUrl = pathed
+      ? `${origin}/.well-known/oauth-protected-resource${mcpPath}`
+      : null;
+    const rootIdentifier = origin;
+    const pathProbe = pathUrl === null ? null : await probePrm(pathUrl);
+    const rootProbe = await probePrm(rootUrl);
+    const pathServedOk =
+      pathProbe !== null && prmShapeErrors(pathProbe).length === 0;
+
+    // Check 1: PRM root. Required when the resource is root-pathed or the
+    // path-based document is missing; INFO otherwise. When served, its
+    // `resource` must be the root identifier (RFC 9728 §3.2, §3.3).
     {
       const id = 'auth-oauth-discovery-prm-root';
       const name = 'AuthOAuthDiscoveryPrmRoot';
       const description =
-        'GET /.well-known/oauth-protected-resource returns 200 + RFC 9728 JSON (resource, authorization_servers)';
-      const url = `${origin}/.well-known/oauth-protected-resource`;
-      try {
-        const r = await fetchJson(url);
-        const errs: string[] = [];
-        if (r.status !== 200) {
-          errs.push(`status MUST be 200; got ${r.status}`);
-        }
-        if (r.body === null) {
+        'GET /.well-known/oauth-protected-resource returns 200 + RFC 9728 JSON (resource, authorization_servers) whose resource is the root identifier; not required when a path-based PRM is served';
+      const r = rootProbe.result;
+      const details = {
+        url: rootUrl,
+        httpStatus: r?.status,
+        resource: r?.body?.resource,
+        authorizationServers: r?.body?.authorization_servers,
+        expectedResource: rootIdentifier,
+        pathBasedServed: pathServedOk
+      };
+      if (pathServedOk && (r === null || r.status !== 200)) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'INFO',
+          timestamp: new Date().toISOString(),
+          errorMessage: `root PRM not served (${r === null ? rootProbe.error : `status ${r.status}`}); not required because the path-based PRM at ${pathUrl} is served (RFC 9728 §3.1; MCP 2025-11-25 accepts either well-known location)`,
+          specReferences: [RFC_9728_REF, MCP_AUTH_REF],
+          details
+        });
+      } else {
+        const errs = prmShapeErrors(rootProbe);
+        let status: 'SUCCESS' | 'WARNING' | 'FAILURE' =
+          errs.length === 0 ? 'SUCCESS' : 'FAILURE';
+        if (
+          errs.length === 0 &&
+          trimSlash(r!.body.resource) !== trimSlash(rootIdentifier)
+        ) {
+          // RFC 9728 §3.2 makes the server serve a `resource` identical to
+          // the identifier the URL was built from, and §3.3 makes the client
+          // discard a mismatch. MCP 2025-11-25 still lists the root URL as a
+          // location for a pathed resource's PRM, so a server following MCP
+          // is not wrong by that spec: WARNING, not FAILURE.
+          status = 'WARNING';
           errs.push(
-            `response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`
+            `root PRM resource "${r!.body.resource}" is not the root resource identifier "${rootIdentifier}"; RFC 9728 §3.3 says clients MUST NOT use metadata whose resource differs from the identifier the well-known URL was built from, so RFC 9728 clients will discard it` +
+              (pathUrl === null
+                ? ''
+                : `; serve this document at ${pathUrl} (RFC 9728 §3.1)`)
           );
-        } else {
-          if (typeof r.body.resource !== 'string') {
-            errs.push('PRM MUST carry `resource` (string)');
-          }
-          if (
-            !Array.isArray(r.body.authorization_servers) ||
-            r.body.authorization_servers.length === 0 ||
-            r.body.authorization_servers.some(
-              (s: unknown) => typeof s !== 'string'
-            )
-          ) {
-            errs.push(
-              'PRM MUST carry `authorization_servers` (non-empty array of strings)'
-            );
-          }
-          prmBody = r.body;
         }
         checks.push({
           id,
           name,
           description,
-          status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+          status,
           timestamp: new Date().toISOString(),
           errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
           specReferences: [RFC_9728_REF, MCP_AUTH_REF],
-          details: {
-            url,
-            httpStatus: r.status,
-            resource: r.body?.resource,
-            authorizationServers: r.body?.authorization_servers
-          }
-        });
-      } catch (error) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: error instanceof Error ? error.message : String(error),
-          specReferences: [RFC_9728_REF, MCP_AUTH_REF]
+          details
         });
       }
     }
@@ -183,7 +255,7 @@ and scope step-up are separate scenarios.`;
       const name = 'AuthOAuthDiscoveryPrmPathBased';
       const description =
         'When the MCP endpoint has a non-root path, GET /.well-known/oauth-protected-resource{mcpPath} also returns 200 + RFC 9728 JSON (RFC 9728 §3.1)';
-      if (mcpPath === '' || mcpPath === '/') {
+      if (pathProbe === null) {
         checks.push({
           id,
           name,
@@ -194,60 +266,28 @@ and scope step-up are separate scenarios.`;
             'MCP endpoint is root-pathed; path-based PRM not required by RFC 9728',
           specReferences: [RFC_9728_REF]
         });
+      } else if (pathProbe.result === null) {
+        checks.push({
+          id,
+          name,
+          description,
+          status: 'FAILURE',
+          timestamp: new Date().toISOString(),
+          errorMessage: pathProbe.error,
+          specReferences: [RFC_9728_REF]
+        });
       } else {
-        const url = `${origin}/.well-known/oauth-protected-resource${mcpPath}`;
-        try {
-          const r = await fetchJson(url);
-          const errs: string[] = [];
-          if (r.status !== 200) {
-            errs.push(`status MUST be 200; got ${r.status}`);
-          }
-          if (r.body === null) {
-            errs.push(
-              `response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`
-            );
-          } else if (typeof r.body.resource !== 'string') {
-            errs.push('path-based PRM MUST carry `resource` (string)');
-          }
-          checks.push({
-            id,
-            name,
-            description,
-            status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
-            specReferences: [RFC_9728_REF],
-            details: { url, httpStatus: r.status }
-          });
-        } catch (error) {
-          checks.push({
-            id,
-            name,
-            description,
-            status: 'FAILURE',
-            timestamp: new Date().toISOString(),
-            errorMessage:
-              error instanceof Error ? error.message : String(error),
-            specReferences: [RFC_9728_REF]
-          });
-        }
-      }
-    }
-
-    // Check 3: PRM Content-Type is application/json.
-    {
-      const id = 'auth-oauth-discovery-prm-content-type';
-      const name = 'AuthOAuthDiscoveryPrmContentType';
-      const description =
-        'PRM endpoint Content-Type MUST be application/json (RFC 9728)';
-      const url = `${origin}/.well-known/oauth-protected-resource`;
-      try {
-        const r = await fetchJson(url);
+        const r = pathProbe.result;
         const errs: string[] = [];
-        if (!r.contentType.toLowerCase().includes('application/json')) {
+        if (r.status !== 200) {
+          errs.push(`status MUST be 200; got ${r.status}`);
+        }
+        if (r.body === null) {
           errs.push(
-            `PRM Content-Type MUST be application/json; got "${r.contentType}"`
+            `response MUST be valid JSON; got: ${r.rawText.slice(0, 80)}`
           );
+        } else if (typeof r.body.resource !== 'string') {
+          errs.push('path-based PRM MUST carry `resource` (string)');
         }
         checks.push({
           id,
@@ -257,20 +297,60 @@ and scope step-up are separate scenarios.`;
           timestamp: new Date().toISOString(),
           errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
           specReferences: [RFC_9728_REF],
-          details: { url, contentType: r.contentType }
-        });
-      } catch (error) {
-        checks.push({
-          id,
-          name,
-          description,
-          status: 'FAILURE',
-          timestamp: new Date().toISOString(),
-          errorMessage: error instanceof Error ? error.message : String(error),
-          specReferences: [RFC_9728_REF]
+          details: { url: pathProbe.url, httpStatus: r.status }
         });
       }
     }
+
+    // Check 3: PRM Content-Type is application/json. Reads the document a
+    // client would use: the path URL first, then the root URL.
+    {
+      const id = 'auth-oauth-discovery-prm-content-type';
+      const name = 'AuthOAuthDiscoveryPrmContentType';
+      const description =
+        'PRM endpoint Content-Type MUST be application/json (RFC 9728); reads the path-based PRM first, then the root PRM';
+      const probes = [pathProbe, rootProbe].filter(
+        (p): p is PrmProbe => p !== null
+      );
+      const chosen = probes.find((p) => p.result?.status === 200) ?? null;
+      const attempts = probes.map((p) => ({
+        url: p.url,
+        status: p.result?.status ?? null,
+        error: p.error
+      }));
+      const errs: string[] = [];
+      if (chosen === null) {
+        errs.push(
+          `no PRM document served (status 200) at ${probes.map((p) => p.url).join(' or ')}`
+        );
+      } else if (
+        !chosen.result!.contentType.toLowerCase().includes('application/json')
+      ) {
+        errs.push(
+          `PRM Content-Type MUST be application/json; got "${chosen.result!.contentType}"`
+        );
+      }
+      checks.push({
+        id,
+        name,
+        description,
+        status: errs.length === 0 ? 'SUCCESS' : 'FAILURE',
+        timestamp: new Date().toISOString(),
+        errorMessage: errs.length > 0 ? errs.join('; ') : undefined,
+        specReferences: [RFC_9728_REF, MCP_AUTH_REF],
+        details: {
+          url: chosen?.url,
+          contentType: chosen?.result?.contentType,
+          attempts
+        }
+      });
+    }
+
+    // Check 4 reads authorization_servers from the document a client
+    // would use: the path-based PRM when served, else the root PRM.
+    const prmBody: any = pathServedOk
+      ? pathProbe!.result!.body
+      : (rootProbe.result?.body ?? null);
 
     // Check 4: AS metadata reachable + RFC 8414 shape.
     // We hit the same-origin proxy first (RFC 8414 fallback); if that
@@ -545,7 +625,8 @@ for obtaining a valid token from the fixture (e.g., via a bootstrap
 endpoint, a token-endpoint flow, or pre-minted via env) and exporting
 it as \`AUTH_VALID_TOKEN\` before invoking the scenario.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
     const validToken = process.env.AUTH_VALID_TOKEN ?? null;
 
@@ -838,7 +919,8 @@ for obtaining each token from the fixture (e.g., via a bootstrap
 endpoint that exposes pre-minted bad tokens) and exporting it via the
 appropriate env var before invoking the scenario.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     const TOOL = 'echo';
@@ -1075,7 +1157,8 @@ an initialized session (Mcp-Session-Id header), so each check
 initializes a fresh session with its respective token before issuing
 the scope-checked tools/call.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
 
     const tokenRead = process.env.AUTH_VALID_TOKEN ?? null;
@@ -1563,7 +1646,8 @@ end-to-end flow check (verifying \`iss\` actually appears in the
 redirect) is currently stubbed as \`SKIPPED\` until the conformance
 suite grows an OAuth code-flow driver.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
     const meta = await fetchAsMetadata(serverUrl);
 
@@ -1672,7 +1756,8 @@ violation." When the AS adds the grants, the checks flip to
 call and verifying the response shape) is stubbed as \`SKIPPED\` until
 the conformance suite grows a token-flow driver.`;
 
-  async run(serverUrl: string): Promise<ConformanceCheck[]> {
+  async run(ctx: RunContext): Promise<ConformanceCheck[]> {
+    const { serverUrl } = ctx;
     const checks: ConformanceCheck[] = [];
     const meta = await fetchAsMetadata(serverUrl);
 
