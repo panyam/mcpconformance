@@ -70,8 +70,8 @@ describe('auth-oauth-discovery — PRM well-known locations', () => {
     );
 
     const root = check(checks, 'auth-oauth-discovery-prm-root');
-    expect(root.status).toBe('INFO');
-    expect(root.errorMessage).toContain('not required');
+    expect(root.status).toBe('SUCCESS');
+    expect(String(root.details?.note)).toContain('not required');
     expect(check(checks, 'auth-oauth-discovery-prm-path-based').status).toBe(
       'SUCCESS'
     );

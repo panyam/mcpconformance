@@ -209,11 +209,16 @@ and scope step-up are separate scenarios.`;
           id,
           name,
           description,
-          status: 'INFO',
+          // The server meets the discovery requirement through the path
+          // URL, which clients try first, so this passes. A root document
+          // for a pathed resource would fail RFC 9728 §3.3 anyway.
+          status: 'SUCCESS',
           timestamp: new Date().toISOString(),
-          errorMessage: `root PRM not served (${r === null ? rootProbe.error : `status ${r.status}`}); not required because the path-based PRM at ${pathUrl} is served (RFC 9728 §3.1; MCP 2025-11-25 accepts either well-known location)`,
           specReferences: [RFC_9728_REF, MCP_AUTH_REF],
-          details
+          details: {
+            ...details,
+            note: `root PRM not served (${r === null ? rootProbe.error : `status ${r.status}`}); not required because the path-based PRM at ${pathUrl} is served (RFC 9728 §3.1; MCP 2025-11-25 accepts either well-known location)`
+          }
         });
       } else {
         const errs = prmShapeErrors(rootProbe);
